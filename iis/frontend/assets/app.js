@@ -44,7 +44,7 @@ function field(data, ...names) {
     const key = Object.keys(data).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
     if (key && data[key] != null) return String(data[key]);
   }
-  return "—";
+  return "N/A";
 }
 
 function setNotice(message, type = "") {
@@ -70,6 +70,17 @@ function showData(data) {
   byId("value-customer-code").textContent = field(data, "MaKhachHang");
   byId("value-po").textContent = field(data, "PO");
   byId("value-product-code").textContent = field(data, "ProductCode");
+  byId("value-item").textContent = field(data, "ItemId", "Item", "ItemCode");
+  byId("value-size").textContent = field(data, "Size");
+  byId("value-art").textContent = field(data, "Art", "ArtCode");
+  byId("value-color").textContent = field(data, "Color", "MauSac");
+  byId("value-season").textContent = field(data, "Season", "Mua");
+  byId("value-factory").textContent = field(data, "XiNghiep", "Factory");
+  byId("value-line").textContent = field(data, "ChuyenMay", "Chuyen", "Line");
+  byId("value-production-order").textContent = field(data, "LenhSanXuat", "ProductionOrder");
+  byId("value-cut-table").textContent = field(data, "BanCat", "CutTable");
+  byId("value-lot").textContent = field(data, "Lot");
+  byId("value-sewing-date").textContent = field(data, "NgaySanXuat", "NgayMay", "SewingDate");
 }
 
 async function getJson(url) {

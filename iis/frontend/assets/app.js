@@ -1,4 +1,3 @@
-const SAMPLE_RFID = "(01)03608393748683(21)000000092192";
 const FALLBACK_IMAGE = "/assets/jacket-line.png";
 
 const steps = [
@@ -37,6 +36,22 @@ function renderSteps() {
       <td><div class="step-name"><span class="chevron">›</span><span class="step-number" style="background:${colors[index % colors.length]}">${step[0]}</span><span><b>${step[1]}</b><small>${step[2]}</small></span></div></td>
       <td><span class="pending">Chờ dữ liệu</span></td><td>—</td><td>—</td>
     </tr>`).join("");
+
+  byId("steps-diagram").innerHTML = steps.map((step, index) => `
+    <article class="diagram-step" style="--step-color:${colors[index % colors.length]}">
+      <span class="diagram-line" aria-hidden="true"></span>
+      <span class="diagram-number">${step[0]}</span>
+      <button class="diagram-card" type="button" aria-expanded="false">
+        <span class="diagram-heading"><span><b>${step[1]}</b><small>${step[2]}</small></span><span class="pending">Chờ dữ liệu</span></span>
+        <span class="diagram-detail">${step[3] || "Chưa có dữ liệu chi tiết cho công đoạn này."}</span>
+      </button>
+    </article>`).join("");
+
+  document.querySelectorAll(".diagram-card").forEach((card) => card.addEventListener("click", () => {
+    const step = card.closest(".diagram-step");
+    const open = step.classList.toggle("open");
+    card.setAttribute("aria-expanded", String(open));
+  }));
 }
 
 function field(data, ...names) {
@@ -67,7 +82,6 @@ function setQueryStatus(message, rfid = state.rfid) {
 function showData(data) {
   byId("value-rfid").textContent = field(data, "RFID");
   byId("value-customer").textContent = field(data, "TenNgan");
-  byId("value-customer-code").textContent = field(data, "MaKhachHang");
   byId("value-po").textContent = field(data, "PO");
   byId("value-product-code").textContent = field(data, "ProductCode");
   byId("value-item").textContent = field(data, "ItemId", "Item", "ItemCode");
@@ -130,9 +144,6 @@ async function search(rfid, trackStatus = false) {
   state.trackedRfid = trackStatus ? state.rfid : null;
   setQueryStatus("Đang tra cứu ...");
   setNotice("Đang tải thông tin…", "loading");
-  const url = new URL(window.location.href);
-  url.searchParams.set("rfid", state.rfid);
-  history.replaceState({}, "", url);
   try {
     const data = await getJson(`/api/traceability?rfid=${encodeURIComponent(state.rfid)}`);
     if (!data || Object.keys(data).length === 0) {
@@ -159,12 +170,24 @@ byId("search-form").addEventListener("submit", (event) => {
   search(value, true);
 });
 document.querySelectorAll(".image-tab").forEach((tab) => tab.addEventListener("click", () => { state.side = tab.dataset.side; renderImage(); }));
+document.querySelectorAll(".view-switch button").forEach((tab) => tab.addEventListener("click", () => {
+  const selectedView = tab.dataset.view;
+  document.querySelectorAll(".view-switch button").forEach((button) => {
+    const active = button === tab;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+  });
+  document.querySelectorAll(".process-view").forEach((view) => { view.hidden = view.id !== `${selectedView}-view`; });
+}));
 byId("previous-image").addEventListener("click", () => { state.side = state.side === "front" ? "back" : "front"; renderImage(); });
 byId("next-image").addEventListener("click", () => { state.side = state.side === "front" ? "back" : "front"; renderImage(); });
 byId("product-image").addEventListener("load", () => { const image = byId("product-image"); byId("image-loading").hidden = true; image.classList.remove("loading"); if (image.src.includes("/api/traceability/image")) setQueryStatus("Tải ảnh xong"); });
 byId("product-image").addEventListener("error", () => { byId("product-image").src = FALLBACK_IMAGE; byId("image-loading").textContent = "Không tải được ảnh"; byId("product-image").classList.remove("loading"); });
 
 renderSteps();
-const initialRfid = new URLSearchParams(location.search).get("rfid") || SAMPLE_RFID;
-byId("rfid-input").value = initialRfid;
-search(initialRfid);
+const initialUrl = new URL(window.location.href);
+if (initialUrl.searchParams.has("rfid")) {
+  initialUrl.searchParams.delete("rfid");
+  history.replaceState({}, "", `${initialUrl.pathname}${initialUrl.search}${initialUrl.hash}`);
+}
+byId("rfid-input").value = "";

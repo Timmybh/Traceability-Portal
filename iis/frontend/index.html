@@ -48,7 +48,6 @@
       <div class="info-card">
         <div class="info-row"><span><b>Mã RFID</b><small>RFID Tag ID</small></span><strong id="value-rfid">—</strong></div>
         <div class="info-row"><span>Khách hàng<small>Customer</small></span><strong id="value-customer">—</strong></div>
-        <div class="info-row"><span>Mã khách hàng<small>Customer Code</small></span><strong id="value-customer-code">—</strong></div>
         <div class="info-row"><span>PO<small>PO Number</small></span><strong id="value-po">—</strong></div>
         <div class="info-row"><span>Mã hàng<small>Product Code</small></span><strong id="value-product-code">—</strong></div>
         <div class="info-row"><span>Item<small>Item Code</small></span><strong id="value-item">N/A</strong></div>
@@ -68,13 +67,19 @@
     <section class="steps-column">
       <div class="section-head">
         <h1>Tiến trình phát triển sản phẩm và sản xuất</h1>
-        <div class="view-switch"><button type="button">Sơ đồ</button><button class="active" type="button">Cây thư mục</button></div>
+        <div class="view-switch" role="tablist" aria-label="Kiểu hiển thị tiến trình">
+          <button id="diagram-tab" type="button" role="tab" aria-selected="false" aria-controls="diagram-view" data-view="diagram">Sơ đồ</button>
+          <button id="tree-tab" class="active" type="button" role="tab" aria-selected="true" aria-controls="tree-view" data-view="tree">Cây thư mục</button>
+        </div>
       </div>
-      <div class="steps-card">
+      <div id="tree-view" class="steps-card process-view" role="tabpanel" aria-labelledby="tree-tab">
         <table>
           <thead><tr><th>CÔNG ĐOẠN / STEP</th><th>NGÀY HOÀN THÀNH / DATE</th><th>NỘI DUNG / CONTENT</th><th>LIÊN KẾT / LINK</th></tr></thead>
           <tbody id="steps-body"></tbody>
         </table>
+      </div>
+      <div id="diagram-view" class="steps-card process-view" role="tabpanel" aria-labelledby="diagram-tab" hidden>
+        <div id="steps-diagram" class="steps-diagram"></div>
       </div>
     </section>
   </main>

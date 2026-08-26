@@ -27,7 +27,7 @@ const steps = [
 ];
 
 const colors = ["#4f7df3", "#e9be28", "#45ae7c", "#e59b28", "#ed7829", "#d93e83", "#8e45e8", "#596ee8", "#497fe0", "#2b9bb5", "#31a681", "#35a15a"];
-const state = { rfid: "", side: "front", imageAvailability: { front: true, back: true } };
+const state = { rfid: "", trackedRfid: null, side: "front", imageAvailability: { front: true, back: true } };
 
 const byId = (id) => document.getElementById(id);
 
@@ -53,6 +53,17 @@ function setNotice(message, type = "") {
   notice.className = `notice ${type}`;
 }
 
+function currentTime() {
+  return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date());
+}
+
+function setQueryStatus(message, rfid = state.rfid) {
+  if (!rfid || state.trackedRfid !== rfid) return;
+  const record = byId("search-record");
+  record.textContent = `[${currentTime()}] - ${message} - QR/RFID : ${rfid}`;
+  record.hidden = false;
+}
+
 function showData(data) {
   byId("value-rfid").textContent = field(data, "RFID");
   byId("value-customer").textContent = field(data, "TenNgan");
@@ -66,7 +77,9 @@ async function getJson(url) {
   if (!response.ok) {
     let message = "Không thể tải dữ liệu";
     try { message = (await response.json()).detail || message; } catch (_) { /* giữ thông báo mặc định */ }
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
   }
   return response.json();
 }
@@ -100,19 +113,28 @@ async function loadImages() {
   renderImage();
 }
 
-async function search(rfid) {
+async function search(rfid, trackStatus = false) {
   state.rfid = rfid.trim();
   if (!state.rfid) return;
+  state.trackedRfid = trackStatus ? state.rfid : null;
+  setQueryStatus("Đang tra cứu ...");
   setNotice("Đang tải thông tin…", "loading");
   const url = new URL(window.location.href);
   url.searchParams.set("rfid", state.rfid);
   history.replaceState({}, "", url);
   try {
     const data = await getJson(`/api/traceability?rfid=${encodeURIComponent(state.rfid)}`);
+    if (!data || Object.keys(data).length === 0) {
+      setQueryStatus("Không tìm thấy dữ liệu");
+      setNotice("Không tìm thấy dữ liệu cho RFID này", "error");
+      return;
+    }
     showData(data);
+    setQueryStatus("Tải dữ liệu xong");
     setNotice("Đã tải dữ liệu RFID", "success");
     loadImages();
   } catch (error) {
+    if (error.status === 404 || /không tìm thấy/i.test(error.message)) setQueryStatus("Không tìm thấy dữ liệu");
     setNotice(error.message, "error");
   }
 }
@@ -122,17 +144,13 @@ byId("search-form").addEventListener("submit", (event) => {
   const input = byId("rfid-input");
   const value = input.value.trim();
   if (!value) return;
-  const time = new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
-  const record = byId("search-record");
-  record.innerHTML = `<time>${time}</time> &nbsp; Dữ liệu tra cứu &nbsp; <strong>${value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")}</strong>`;
-  record.hidden = false;
   input.value = "";
-  search(value);
+  search(value, true);
 });
 document.querySelectorAll(".image-tab").forEach((tab) => tab.addEventListener("click", () => { state.side = tab.dataset.side; renderImage(); }));
 byId("previous-image").addEventListener("click", () => { state.side = state.side === "front" ? "back" : "front"; renderImage(); });
 byId("next-image").addEventListener("click", () => { state.side = state.side === "front" ? "back" : "front"; renderImage(); });
-byId("product-image").addEventListener("load", () => { byId("image-loading").hidden = true; byId("product-image").classList.remove("loading"); });
+byId("product-image").addEventListener("load", () => { const image = byId("product-image"); byId("image-loading").hidden = true; image.classList.remove("loading"); if (image.src.includes("/api/traceability/image")) setQueryStatus("Tải ảnh xong"); });
 byId("product-image").addEventListener("error", () => { byId("product-image").src = FALLBACK_IMAGE; byId("image-loading").textContent = "Không tải được ảnh"; byId("product-image").classList.remove("loading"); });
 
 renderSteps();

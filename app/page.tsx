@@ -7,8 +7,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 type TraceStep = { no: string; name: string; english: string; date?: string; content?: string; link?: string; color: string; detail?: string };
-type SearchRecord = { time: string; rfid: string };
+type QueryStatus = { time: string; message: string; rfid: string };
 const SAMPLE_RFID = "(01)03608393748683(21)000000092192";
+
+function currentTime() {
+  return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date());
+}
 
 const steps: TraceStep[] = [
   { no: "01", name: "Phát triển sản phẩm", english: "Product Development", date: "12/11/2025", color: "#4f7df3", detail: "Mẫu và tài liệu kỹ thuật đã được xác nhận." },
@@ -48,10 +52,11 @@ export default function Home() {
   const [expanded, setExpanded] = useState<string | null>("09");
   const [copied, setCopied] = useState(false);
   const [imageSide, setImageSide] = useState<"front" | "back">("front");
-  const [searchRecord, setSearchRecord] = useState<SearchRecord | null>(null);
+  const [queryStatus, setQueryStatus] = useState<QueryStatus | null>(null);
   useEffect(() => { const value = new URLSearchParams(window.location.search).get("rfid"); if (value) { setRfid(value); setActiveRfid(value); } }, []);
   const normalized = useMemo(() => activeRfid.trim(), [activeRfid]);
-  function search(event: FormEvent) { event.preventDefault(); const value = rfid.trim(); if (!value) return; const time = new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date()); setActiveRfid(value); setSearchRecord({ time, rfid: value }); setRfid(""); const url = new URL(window.location.href); url.searchParams.set("rfid", value); window.history.replaceState({}, "", url); }
+  function search(event: FormEvent) { event.preventDefault(); const value = rfid.trim(); if (!value) return; setQueryStatus({ time: currentTime(), message: "Đang tra cứu ...", rfid: value }); setActiveRfid(value); setRfid(""); const url = new URL(window.location.href); url.searchParams.set("rfid", value); window.history.replaceState({}, "", url); window.setTimeout(() => setQueryStatus((current) => current?.rfid === value && current.message === "Đang tra cứu ..." ? { time: currentTime(), message: "Tải dữ liệu xong", rfid: value } : current), 350); }
+  function imageLoaded(source: string) { if (!source.includes("/api/traceability/image")) return; setQueryStatus((current) => current?.rfid === normalized ? { time: currentTime(), message: "Tải ảnh xong", rfid: normalized } : current); }
   async function copyRfid() { await navigator.clipboard.writeText(normalized); setCopied(true); window.setTimeout(() => setCopied(false), 1400); }
 
   return (
@@ -68,13 +73,13 @@ export default function Home() {
               <Search className="ml-3 size-5 shrink-0 text-[#3564ea]" /><input aria-label="Mã RFID" value={rfid} onChange={(e) => setRfid(e.target.value)} placeholder="Nhập hoặc quét mã RFID ..." className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm font-medium outline-none placeholder:text-slate-400 md:text-base" />
               <Button type="submit" className="rounded-full bg-[#3f63e9] px-5 hover:bg-[#3152d1]">Tra cứu <ArrowRight /></Button>
             </form>
-            {searchRecord && <p className="mt-2 px-4 text-sm text-slate-500" role="status" aria-live="polite"><time className="font-semibold text-slate-700">{searchRecord.time}</time><span className="mx-2">Dữ liệu tra cứu</span><strong className="break-all font-semibold text-[#4164e8]">{searchRecord.rfid}</strong></p>}
+            {queryStatus && <p className="mt-2 px-4 text-sm text-slate-500" role="status" aria-live="polite" aria-label="Dòng tình trạng truy vấn"><time className="font-semibold text-slate-700">[{queryStatus.time}]</time><span className="mx-2">- {queryStatus.message} - QR/RFID :</span><strong className="break-all font-semibold text-[#4164e8]">{queryStatus.rfid}</strong></p>}
           </div>
         </div>
       </header>
 
       <div className="mx-auto grid max-w-[1900px] gap-5 px-5 py-7 lg:grid-cols-[minmax(280px,.95fr)_minmax(310px,.88fr)_minmax(650px,1.9fr)] lg:px-8">
-        <section className="min-w-0"><h2 className="section-title">Hình ảnh sản phẩm</h2><div className="product-card"><div className="product-image-wrap relative"><button type="button" aria-label="Xem mặt trước" onClick={() => setImageSide("front")} className="image-nav left-3"><ChevronLeft /></button><img key={`${normalized}-${imageSide}`} src={`/api/traceability/image?rfid=${encodeURIComponent(normalized)}&side=${imageSide}`} onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/jacket-line.png"; }} alt={imageSide === "front" ? "Mặt trước sản phẩm" : "Mặt sau sản phẩm"} className="product-image" loading="lazy" decoding="async" fetchPriority="low" /><button type="button" aria-label="Xem mặt sau" onClick={() => setImageSide("back")} className="image-nav right-3"><ChevronRight /></button></div><div className="flex items-center justify-center gap-2 bg-slate-100 py-3"><button type="button" onClick={() => setImageSide("front")} className={imageSide === "front" ? "image-side active" : "image-side"}>Mặt trước</button><button type="button" onClick={() => setImageSide("back")} className={imageSide === "back" ? "image-side active" : "image-side"}>Mặt sau</button></div></div></section>
+        <section className="min-w-0"><h2 className="section-title">Hình ảnh sản phẩm</h2><div className="product-card"><div className="product-image-wrap relative"><button type="button" aria-label="Xem mặt trước" onClick={() => setImageSide("front")} className="image-nav left-3"><ChevronLeft /></button><img key={`${normalized}-${imageSide}`} src={`/api/traceability/image?rfid=${encodeURIComponent(normalized)}&side=${imageSide}`} onLoad={(event) => imageLoaded(event.currentTarget.src)} onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = "/jacket-line.png"; }} alt={imageSide === "front" ? "Mặt trước sản phẩm" : "Mặt sau sản phẩm"} className="product-image" loading="lazy" decoding="async" fetchPriority="low" /><button type="button" aria-label="Xem mặt sau" onClick={() => setImageSide("back")} className="image-nav right-3"><ChevronRight /></button></div><div className="flex items-center justify-center gap-2 bg-slate-100 py-3"><button type="button" onClick={() => setImageSide("front")} className={imageSide === "front" ? "image-side active" : "image-side"}>Mặt trước</button><button type="button" onClick={() => setImageSide("back")} className={imageSide === "back" ? "image-side active" : "image-side"}>Mặt sau</button></div></div></section>
 
         <section className="min-w-0"><h2 className="section-title">Thông tin chung</h2><div className="h-[780px] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-sm scrollbar-thin">
           <div className="info-row items-start"><div><p className="font-bold text-[#4266e8]">Mã RFID</p><p className="sub-label">RFID Tag ID</p></div><div className="flex min-w-0 items-center gap-2"><span className="break-all text-right text-xs font-bold">{normalized}</span><button onClick={copyRfid} aria-label="Sao chép RFID" className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-[#4266e8]">{copied ? <Clipboard className="size-4 text-emerald-500" /> : <Copy className="size-4" />}</button></div></div>

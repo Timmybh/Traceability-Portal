@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Cổng tra cứu tiến trình sản xuất theo RFID">
+  <title>Web Truy suất</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">DT</div>
+      <div class="company"><strong>CÔNG TY CỔ PHẦN ĐỒNG TIẾN</strong><small>DONG TIEN JOINT STOCK COMPANY</small></div>
+      <div class="portal"><strong>CỔNG TRUY XUẤT NGUỒN GỐC</strong><small>Product Traceability Portal</small></div>
+    </div>
+    <form id="search-form" class="search-form">
+      <span class="search-icon" aria-hidden="true">⌕</span>
+      <input id="rfid-input" name="rfid" autocomplete="off" placeholder="Nhập hoặc quét mã RFID ..." aria-label="Mã RFID">
+      <button type="submit">Tra cứu <span aria-hidden="true">→</span></button>
+    </form>
+  </header>
+
+  <div id="notice" class="notice" role="status" aria-live="polite"></div>
+
+  <main class="dashboard">
+    <section class="image-column">
+      <h1>Hình ảnh sản phẩm</h1>
+      <div class="image-card">
+        <div class="image-stage">
+          <button id="previous-image" class="image-arrow left" type="button" aria-label="Ảnh trước">‹</button>
+          <div id="image-loading" class="image-loading" hidden>Đang tải ảnh…</div>
+          <img id="product-image" src="/assets/jacket-line.png" alt="Hình ảnh sản phẩm">
+          <button id="next-image" class="image-arrow right" type="button" aria-label="Ảnh sau">›</button>
+        </div>
+        <div class="image-tabs" role="tablist" aria-label="Mặt sản phẩm">
+          <button class="image-tab active" type="button" data-side="front">Mặt trước</button>
+          <button class="image-tab" type="button" data-side="back">Mặt sau</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="info-column">
+      <h1>Thông tin chung</h1>
+      <div class="info-card">
+        <div class="info-row"><span><b>Mã RFID</b><small>RFID Tag ID</small></span><strong id="value-rfid">—</strong></div>
+        <div class="info-row"><span>Khách hàng<small>Customer</small></span><strong id="value-customer">—</strong></div>
+        <div class="info-row"><span>Mã khách hàng<small>Customer Code</small></span><strong id="value-customer-code">—</strong></div>
+        <div class="info-row"><span>PO<small>PO Number</small></span><strong id="value-po">—</strong></div>
+        <div class="info-row"><span>Mã hàng<small>Product Code</small></span><strong id="value-product-code">—</strong></div>
+      </div>
+    </section>
+
+    <section class="steps-column">
+      <div class="section-head">
+        <h1>Tiến trình phát triển sản phẩm và sản xuất</h1>
+        <div class="view-switch"><button type="button">Sơ đồ</button><button class="active" type="button">Cây thư mục</button></div>
+      </div>
+      <div class="steps-card">
+        <table>
+          <thead><tr><th>CÔNG ĐOẠN / STEP</th><th>NGÀY HOÀN THÀNH / DATE</th><th>NỘI DUNG / CONTENT</th><th>LIÊN KẾT / LINK</th></tr></thead>
+          <tbody id="steps-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/assets/app.js" defer></script>
+</body>
+</html>

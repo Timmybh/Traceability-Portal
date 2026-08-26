@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 type TraceStep = { no: string; name: string; english: string; date?: string; content?: string; link?: string; color: string; detail?: string };
+type SearchRecord = { time: string; rfid: string };
 const SAMPLE_RFID = "(01)03608393748683(21)000000092192";
 
 const steps: TraceStep[] = [
@@ -19,9 +20,19 @@ const steps: TraceStep[] = [
   { no: "07", name: "Xả vải", english: "Fabric Relaxing", date: "15/08/2026", color: "#8e45e8", detail: "Vải đã đủ thời gian xả theo tiêu chuẩn." },
   { no: "08", name: "Trải vải", english: "Fabric Spreading", date: "15/08/2026", color: "#596ee8", detail: "Hoàn tất trải vải theo sơ đồ cắt." },
   { no: "09", name: "Cắt vải", english: "Fabric Cutting", date: "15/08/2026", color: "#497fe0", detail: "Tem RFID được gắn với cây vải và bàn cắt." },
-  { no: "10", name: "Đánh số & bóc tập", english: "Numbering & Bundling", date: "16/08/2026", color: "#2b9bb5", detail: "Chi tiết đã được đánh số và tạo bó." },
-  { no: "11", name: "May", english: "Sewing", date: "21/08/2026", color: "#31a681", detail: "Sản phẩm đã hoàn tất tại chuyền may." },
-  { no: "12", name: "Kiểm thành phẩm", english: "Final Inspection", date: "22/08/2026", color: "#35a15a", detail: "Thành phẩm đạt kiểm tra chất lượng." },
+  { no: "10", name: "Kiểm BTP", english: "WIP Inspection", color: "#2b9bb5", detail: "Kiểm tra chất lượng bán thành phẩm." },
+  { no: "11", name: "Nhập kho BTP", english: "WIP Inbound", color: "#31a681", detail: "Bán thành phẩm được nhập kho." },
+  { no: "12", name: "Đặt BTP", english: "WIP Issuing", color: "#35a15a", detail: "Bán thành phẩm được cấp phát cho sản xuất." },
+  { no: "13", name: "Xuất BTP", english: "WIP Outbound", color: "#4f7df3", detail: "Bán thành phẩm được xuất khỏi kho." },
+  { no: "15", name: "Quét nhận BTP", english: "WIP Scanning", color: "#45ae7c", detail: "Chuyền sản xuất quét nhận bán thành phẩm." },
+  { no: "16", name: "Kiểm Inline", english: "Inline Inspection", color: "#fb923c", detail: "Kiểm tra chất lượng trong chuyền." },
+  { no: "17", name: "Biên bản kiểm sản phẩm đầu chuyền", english: "Start-of-Line Check", color: "#fb923c", detail: "Ghi nhận kết quả kiểm sản phẩm đầu chuyền." },
+  { no: "18", name: "Kết quả kiểm sản phẩm cuối chuyền", english: "End-of-Line Check", color: "#596ee8", detail: "Ghi nhận kết quả kiểm sản phẩm cuối chuyền." },
+  { no: "19", name: "Kiểm Enline", english: "Enline Inspection", color: "#8e45e8", detail: "Kiểm tra chất lượng Enline." },
+  { no: "20", name: "Đóng gói", english: "Packing", color: "#d93e83", detail: "Sản phẩm được hoàn thiện và đóng gói." },
+  { no: "21", name: "Nhập Kho Thành phẩm", english: "FG Inbound", color: "#31a681", detail: "Thành phẩm được nhập kho." },
+  { no: "22", name: "Kiểm final", english: "Final Inspection", color: "#e9be28", detail: "Kiểm tra chất lượng cuối cùng." },
+  { no: "23", name: "Xuất kho thành phẩm", english: "FG Outbound", color: "#ed7829", detail: "Thành phẩm được xuất khỏi kho." },
 ];
 
 const info = [
@@ -37,9 +48,10 @@ export default function Home() {
   const [expanded, setExpanded] = useState<string | null>("09");
   const [copied, setCopied] = useState(false);
   const [imageSide, setImageSide] = useState<"front" | "back">("front");
+  const [searchRecord, setSearchRecord] = useState<SearchRecord | null>(null);
   useEffect(() => { const value = new URLSearchParams(window.location.search).get("rfid"); if (value) { setRfid(value); setActiveRfid(value); } }, []);
   const normalized = useMemo(() => activeRfid.trim(), [activeRfid]);
-  function search(event: FormEvent) { event.preventDefault(); const value = rfid.trim(); if (!value) return; setActiveRfid(value); const url = new URL(window.location.href); url.searchParams.set("rfid", value); window.history.replaceState({}, "", url); }
+  function search(event: FormEvent) { event.preventDefault(); const value = rfid.trim(); if (!value) return; const time = new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date()); setActiveRfid(value); setSearchRecord({ time, rfid: value }); setRfid(""); const url = new URL(window.location.href); url.searchParams.set("rfid", value); window.history.replaceState({}, "", url); }
   async function copyRfid() { await navigator.clipboard.writeText(normalized); setCopied(true); window.setTimeout(() => setCopied(false), 1400); }
 
   return (
@@ -51,10 +63,13 @@ export default function Home() {
             <div className="border-r border-slate-200 pr-5"><p className="text-[15px] font-bold leading-6 text-[#c9343e]">CÔNG TY CỔ PHẦN ĐỒNG TIẾN</p><p className="text-[11px] font-semibold leading-4 tracking-wide text-[#b99515]">DONG TIEN JOINT STOCK COMPANY</p></div>
             <div className="hidden sm:block"><p className="text-sm font-bold leading-6">CỔNG TRUY XUẤT NGUỒN GỐC</p><p className="text-xs leading-5 text-slate-500">Product Traceability Portal</p></div>
           </div>
-          <form onSubmit={search} className="flex w-full max-w-[760px] items-center rounded-full border-2 border-[#4c75f2] bg-white p-1.5 shadow-[0_0_0_5px_rgba(76,117,242,.09)]">
-            <Search className="ml-3 size-5 shrink-0 text-[#3564ea]" /><input aria-label="Mã RFID" value={rfid} onChange={(e) => setRfid(e.target.value)} placeholder="Nhập hoặc quét mã RFID ..." className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm font-medium outline-none placeholder:text-slate-400 md:text-base" />
-            <Button type="submit" className="rounded-full bg-[#3f63e9] px-5 hover:bg-[#3152d1]">Tra cứu <ArrowRight /></Button>
-          </form>
+          <div className="w-full max-w-[760px]">
+            <form onSubmit={search} className="flex w-full items-center rounded-full border-2 border-[#4c75f2] bg-white p-1.5 shadow-[0_0_0_5px_rgba(76,117,242,.09)]">
+              <Search className="ml-3 size-5 shrink-0 text-[#3564ea]" /><input aria-label="Mã RFID" value={rfid} onChange={(e) => setRfid(e.target.value)} placeholder="Nhập hoặc quét mã RFID ..." className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm font-medium outline-none placeholder:text-slate-400 md:text-base" />
+              <Button type="submit" className="rounded-full bg-[#3f63e9] px-5 hover:bg-[#3152d1]">Tra cứu <ArrowRight /></Button>
+            </form>
+            {searchRecord && <p className="mt-2 px-4 text-sm text-slate-500" role="status" aria-live="polite"><time className="font-semibold text-slate-700">{searchRecord.time}</time><span className="mx-2">Dữ liệu tra cứu</span><strong className="break-all font-semibold text-[#4164e8]">{searchRecord.rfid}</strong></p>}
+          </div>
         </div>
       </header>
 

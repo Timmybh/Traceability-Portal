@@ -14,11 +14,14 @@
       <div class="company"><strong>CÔNG TY CỔ PHẦN ĐỒNG TIẾN</strong><small>DONG TIEN JOINT STOCK COMPANY</small></div>
       <div class="portal"><strong>CỔNG TRUY XUẤT NGUỒN GỐC</strong><small>Product Traceability Portal</small></div>
     </div>
-    <form id="search-form" class="search-form">
-      <span class="search-icon" aria-hidden="true">⌕</span>
-      <input id="rfid-input" name="rfid" autocomplete="off" placeholder="Nhập hoặc quét mã RFID ..." aria-label="Mã RFID">
-      <button type="submit">Tra cứu <span aria-hidden="true">→</span></button>
-    </form>
+    <div class="search-area">
+      <form id="search-form" class="search-form">
+        <span class="search-icon" aria-hidden="true">⌕</span>
+        <input id="rfid-input" name="rfid" autocomplete="off" placeholder="Nhập hoặc quét mã RFID ..." aria-label="Mã RFID">
+        <button type="submit">Tra cứu <span aria-hidden="true">→</span></button>
+      </form>
+      <p id="search-record" class="search-record" role="status" aria-live="polite" hidden></p>
+    </div>
   </header>
 
   <div id="notice" class="notice" role="status" aria-live="polite"></div>

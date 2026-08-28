@@ -4,8 +4,8 @@
 
 - IIS phục vụ frontend tĩnh tại port `8374`.
 - IIS URL Rewrite + ARR chuyển `/api/*` đến FastAPI tại `127.0.0.1:8000`.
-- FastAPI gọi SQL Server bằng `pyodbc` và câu truy vấn trong `.env`.
-- Backend tải ảnh nội bộ và stream về cùng tên miền.
+- FastAPI bind RFID vào tham số `@RFID` của `SQLQUERY`, đọc thông tin chung và timeline từ SQL Server.
+- Sau khi dữ liệu chính trả về, frontend tải song song ảnh mặt trước/mặt sau qua API ảnh riêng; backend stream ảnh nội bộ về cùng tên miền.
 - NSSM chạy backend như Windows Service, tự khởi động cùng Windows.
 
 ## Yêu cầu Windows Server
@@ -25,7 +25,9 @@ Set-ExecutionPolicy -Scope Process Bypass
 .\iis\deploy\windows\deploy-iis.ps1
 ```
 
-Lần đầu script tạo `C:\Apps\WebTruySuat\backend\.env`. Điền `SQLSERVER_HOST`, `SQLSERVER_USER`, `SQLSERVER_PASSWORD`, giữ nguyên hai câu query rồi chạy lại script.
+Lần đầu script tạo `C:\Apps\WebTruySuat\backend\.env`. Điền `SQLSERVER_HOST`, `SQLSERVER_USER`, `SQLSERVER_PASSWORD`, giữ nguyên hai câu query rồi chạy lại script. Các lần deploy sau, script chỉ đồng bộ `SQLQUERY` và `SQLQUERY_IMAGE` từ source mới; thông tin đăng nhập được giữ nguyên.
+
+`SQLQUERY` trả đúng một dòng cho RFID và đóng gói toàn bộ tiến trình trong `TimelineJson`. `SQLQUERY_IMAGE` chạy riêng để việc tải ảnh không chặn thông tin chung và tiến trình.
 
 Named instance:
 

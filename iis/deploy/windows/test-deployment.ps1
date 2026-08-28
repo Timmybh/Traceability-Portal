@@ -17,6 +17,7 @@ $images = Invoke-RestMethod "http://127.0.0.1:$Port/api/traceability/images?rfid
     Customer = $data.TenNgan
     PO = $data.PO
     ProductCode = $data.ProductCode
+    TimelineSteps = @($data.Timeline).Count
     FrontImage = $images.front
     BackImage = $images.back
 }

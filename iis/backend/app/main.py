@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import json
 from typing import Literal
 from urllib.parse import urlparse
 
@@ -60,7 +61,16 @@ def traceability(rfid: str = Query(..., min_length=1, max_length=100)):
         raise _database_error(exc) from exc
     if not rows:
         raise HTTPException(status_code=404, detail="Không tìm thấy RFID")
-    return rows[0]
+    result = rows[0]
+    timeline_json = result.pop("TimelineJson", None)
+    if timeline_json:
+        try:
+            result["Timeline"] = json.loads(str(timeline_json))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            result["Timeline"] = []
+    else:
+        result["Timeline"] = []
+    return result
 
 
 def _image_url_for_side(rows: list[dict], side: Literal["front", "back"]) -> str:

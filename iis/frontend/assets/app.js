@@ -1,4 +1,4 @@
-const FALLBACK_IMAGE = "/assets/jacket-line.png";
+const FALLBACK_IMAGE = "/assets/jacket-line.png?v=20260829-1";
 
 const steps = [
   ["01", "Phát triển sản phẩm", "Product Development", ""],
@@ -31,6 +31,9 @@ const state = {
   trackedRfid: null,
   side: "front",
   imageAvailability: { front: false, back: false },
+  imageTimer: null,
+  imageTransitioning: false,
+  imageTransitionId: 0,
   searchId: 0,
 };
 
@@ -72,36 +75,64 @@ function timelineByStep(timeline) {
   return grouped;
 }
 
-function detailMarkup(record) {
-  const details = Array.isArray(record?.Details) ? record.Details : [];
-  if (!details.length) return escapeHtml(record?.StepContent || "—");
-  return `
-    ${record?.StepContent ? `<div class="step-content">${escapeHtml(record.StepContent)}</div>` : ""}
-    <details class="step-details">
-      <summary>${details.length} chi tiết</summary>
-      <div class="step-detail-list">${details.map((detail) => {
-        const link = safeLink(detail.DetailLink);
-        return `<div class="step-detail-item"><b>${escapeHtml(detail.DetailDate || "—")}</b><span>${escapeHtml(detail.DetailContent || "—")}</span>${link ? `<a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">Mở tài liệu</a>` : ""}</div>`;
-      }).join("")}</div>
-    </details>`;
+function formatDate(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : (value || "—");
+}
+
+function detailRows(stepNumber, details, initiallyOpen) {
+  return details.map((detail) => {
+    const content = detail.DetailContent || "—";
+    const link = safeLink(detail.DetailLink);
+    return `
+      <tr class="step-detail-row" data-parent-step="${stepNumber}"${initiallyOpen ? "" : " hidden"}>
+        <td>
+          <div class="detail-title" title="${escapeHtml(content)}">
+            <span class="document-icon" aria-hidden="true"></span>
+            <strong>${escapeHtml(content)}</strong>
+          </div>
+        </td>
+        <td class="detail-date">${escapeHtml(formatDate(detail.DetailDate))}</td>
+        <td><div class="detail-content" title="${escapeHtml(content)}">${escapeHtml(content)}</div></td>
+        <td>${link ? `<a class="document-link" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer"><span>Xem chứng từ</span><span aria-hidden="true">↗</span></a>` : "—"}</td>
+      </tr>`;
+  }).join("");
 }
 
 function renderSteps(timeline = []) {
   const records = timelineByStep(timeline);
+  const firstOpenStep = steps.find((step) => (records.get(step[0])?.Details || []).length)?.[0];
   byId("steps-body").innerHTML = steps.map((step, index) => {
     const record = records.get(step[0]);
     const details = Array.isArray(record?.Details) ? record.Details : [];
-    const latest = details.at(-1);
-    const date = latest?.DetailDate || record?.StepDate || "—";
-    const link = safeLink(record?.StepLink || latest?.DetailLink);
+    const canExpand = details.length > 0;
+    const initiallyOpen = canExpand && step[0] === firstOpenStep;
+    const date = formatDate(record?.StepDate);
     return `
-    <tr>
-      <td><div class="step-name"><span class="chevron">›</span><span class="step-number" style="background:${colors[index % colors.length]}">${step[0]}</span><span><b>${step[1]}</b><small>${step[2]}</small></span></div></td>
-      <td>${record ? `<span class="completed">${escapeHtml(date)}</span>` : `<span class="pending">Chờ dữ liệu</span>`}</td>
-      <td>${record ? detailMarkup(record) : "—"}</td>
-      <td>${link ? `<a class="step-link" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">Mở liên kết</a>` : "—"}</td>
-    </tr>`;
+      <tr class="step-parent-row${initiallyOpen ? " is-open" : ""}" data-step="${step[0]}">
+        <td>
+          <button class="step-toggle" type="button" data-step="${step[0]}" aria-expanded="${initiallyOpen}"${canExpand ? "" : " disabled"}>
+            <span class="chevron" aria-hidden="true">${canExpand ? "⌄" : "›"}</span>
+            <span class="step-number" style="background:${colors[index % colors.length]}">${step[0]}</span>
+            <span class="step-label"><b>${step[1]}</b><small>${step[2]}</small></span>
+          </button>
+        </td>
+        <td>${record ? `<span class="completed">${escapeHtml(date)}</span>` : `<span class="pending">Chờ dữ liệu</span>`}</td>
+        <td>—</td>
+        <td>—</td>
+      </tr>
+      ${detailRows(step[0], details, initiallyOpen)}`;
   }).join("");
+
+  document.querySelectorAll(".step-toggle:not(:disabled)").forEach((button) => button.addEventListener("click", () => {
+    const stepNumber = button.dataset.step;
+    const expanded = button.getAttribute("aria-expanded") !== "true";
+    button.setAttribute("aria-expanded", String(expanded));
+    button.closest(".step-parent-row").classList.toggle("is-open", expanded);
+    document.querySelectorAll(`.step-detail-row[data-parent-step="${stepNumber}"]`).forEach((row) => {
+      row.hidden = !expanded;
+    });
+  }));
 
   byId("steps-diagram").innerHTML = steps.map((step, index) => {
     const record = records.get(step[0]);
@@ -149,6 +180,13 @@ function setQueryStatus(message, rfid = state.rfid) {
   const record = byId("search-record");
   record.textContent = `[${currentTime()}] - ${message} - QR/RFID : ${rfid}`;
   record.hidden = false;
+}
+
+function focusScannerInput() {
+  window.requestAnimationFrame(() => {
+    const input = byId("rfid-input");
+    input.focus({ preventScroll: true });
+  });
 }
 
 function showData(data) {
@@ -202,6 +240,54 @@ function renderImage() {
   image.src = imageUrl(state.side);
 }
 
+function stopImageRotation() {
+  if (state.imageTimer) window.clearInterval(state.imageTimer);
+  state.imageTimer = null;
+}
+
+function startImageRotation() {
+  stopImageRotation();
+  if (!state.imageAvailability.front || !state.imageAvailability.back) return;
+  state.imageTimer = window.setInterval(() => {
+    transitionImage(state.side === "front" ? "back" : "front", 1, false);
+  }, 3000);
+}
+
+function cancelImageTransition() {
+  state.imageTransitionId += 1;
+  state.imageTransitioning = false;
+  byId("product-image").classList.remove("run-out-left", "run-out-right", "run-in-left", "run-in-right");
+}
+
+function transitionImage(nextSide, direction = 1, restartTimer = true) {
+  if (nextSide === state.side || !state.imageAvailability[nextSide] || state.imageTransitioning) {
+    if (restartTimer) startImageRotation();
+    return;
+  }
+
+  if (restartTimer) stopImageRotation();
+  state.imageTransitioning = true;
+  const transitionId = ++state.imageTransitionId;
+  const image = byId("product-image");
+  const outClass = direction > 0 ? "run-out-left" : "run-out-right";
+  const inClass = direction > 0 ? "run-in-right" : "run-in-left";
+  image.classList.add(outClass);
+
+  window.setTimeout(() => {
+    if (transitionId !== state.imageTransitionId) return;
+    state.side = nextSide;
+    image.classList.remove(outClass);
+    renderImage();
+    image.classList.add(inClass);
+    window.setTimeout(() => {
+      if (transitionId !== state.imageTransitionId) return;
+      image.classList.remove(inClass);
+      state.imageTransitioning = false;
+      if (restartTimer) startImageRotation();
+    }, 380);
+  }, 260);
+}
+
 function preloadImage(url) {
   return new Promise((resolve) => {
     const image = new Image();
@@ -228,6 +314,7 @@ async function loadImages(rfid, searchId) {
 
   state.imageAvailability = { front: loaded[0], back: loaded[1] };
   renderImage();
+  startImageRotation();
   const loadedCount = loaded.filter(Boolean).length;
   setQueryStatus(loadedCount ? `Tải ${loadedCount}/2 ảnh xong` : "Không tìm thấy ảnh", rfid);
 }
@@ -239,6 +326,8 @@ async function search(rfid, trackStatus = false) {
   state.trackedRfid = trackStatus ? state.rfid : null;
   state.side = "front";
   state.imageAvailability = { front: false, back: false };
+  stopImageRotation();
+  cancelImageTransition();
   setQueryStatus("Đang tra cứu ...");
   setNotice("Đang tải thông tin…", "loading");
   try {
@@ -257,6 +346,8 @@ async function search(rfid, trackStatus = false) {
     if (searchId !== state.searchId) return;
     if (error.status === 404 || /không tìm thấy/i.test(error.message)) setQueryStatus("Không tìm thấy dữ liệu");
     setNotice(error.message, "error");
+  } finally {
+    if (searchId === state.searchId) focusScannerInput();
   }
 }
 
@@ -266,9 +357,17 @@ byId("search-form").addEventListener("submit", (event) => {
   const value = input.value.trim();
   if (!value) return;
   input.value = "";
+  focusScannerInput();
   search(value, true);
 });
-document.querySelectorAll(".image-tab").forEach((tab) => tab.addEventListener("click", () => { state.side = tab.dataset.side; renderImage(); }));
+byId("rfid-input").addEventListener("keydown", (event) => {
+  if (event.key !== "Tab" || !event.currentTarget.value.trim()) return;
+  event.preventDefault();
+  byId("search-form").requestSubmit();
+});
+document.querySelectorAll(".image-tab").forEach((tab) => tab.addEventListener("click", () => {
+  transitionImage(tab.dataset.side, tab.dataset.side === "front" ? -1 : 1);
+}));
 document.querySelectorAll(".view-switch button").forEach((tab) => tab.addEventListener("click", () => {
   const selectedView = tab.dataset.view;
   document.querySelectorAll(".view-switch button").forEach((button) => {
@@ -278,9 +377,16 @@ document.querySelectorAll(".view-switch button").forEach((tab) => tab.addEventLi
   });
   document.querySelectorAll(".process-view").forEach((view) => { view.hidden = view.id !== `${selectedView}-view`; });
 }));
-byId("previous-image").addEventListener("click", () => { state.side = state.side === "front" ? "back" : "front"; renderImage(); });
-byId("next-image").addEventListener("click", () => { state.side = state.side === "front" ? "back" : "front"; renderImage(); });
-byId("product-image").addEventListener("load", () => { const image = byId("product-image"); byId("image-loading").hidden = true; image.classList.remove("loading"); });
+byId("previous-image").addEventListener("click", () => transitionImage(state.side === "front" ? "back" : "front", -1));
+byId("next-image").addEventListener("click", () => transitionImage(state.side === "front" ? "back" : "front", 1));
+byId("product-image").addEventListener("load", () => {
+  const image = byId("product-image");
+  byId("image-loading").hidden = true;
+  image.classList.remove("loading");
+  if (image.naturalWidth && image.naturalHeight) {
+    image.closest(".image-stage").style.setProperty("--image-aspect", `${image.naturalWidth} / ${image.naturalHeight}`);
+  }
+});
 byId("product-image").addEventListener("error", () => { byId("product-image").src = FALLBACK_IMAGE; byId("image-loading").textContent = "Không tải được ảnh"; byId("product-image").classList.remove("loading"); });
 
 renderSteps();
@@ -290,3 +396,4 @@ if (initialUrl.searchParams.has("rfid")) {
   history.replaceState({}, "", `${initialUrl.pathname}${initialUrl.search}${initialUrl.hash}`);
 }
 byId("rfid-input").value = "";
+focusScannerInput();

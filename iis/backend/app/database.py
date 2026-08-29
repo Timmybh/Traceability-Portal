@@ -42,6 +42,7 @@ def query_rows(settings: Settings, query: str, rfid: str) -> list[dict[str, Any]
     prepared, params = _parameterize(query, rfid)
     with pyodbc.connect(connection_string(settings)) as connection:
         cursor = connection.cursor()
+        cursor.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
         cursor.execute(prepared, *params)
         columns = [column[0] for column in cursor.description or []]
         return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]

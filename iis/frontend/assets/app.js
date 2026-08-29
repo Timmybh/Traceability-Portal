@@ -179,6 +179,7 @@ function setQueryStatus(message, rfid = state.rfid) {
   if (!rfid || state.trackedRfid !== rfid) return;
   const record = byId("search-record");
   record.textContent = `[${currentTime()}] - ${message} - QR/RFID : ${rfid}`;
+  record.classList.toggle("is-running", message.startsWith("Đang"));
   record.hidden = false;
 }
 
@@ -206,6 +207,22 @@ function showData(data) {
   byId("value-lot").textContent = field(data, "Lot");
   byId("value-sewing-date").textContent = field(data, "NgaySanXuat", "NgayMay", "SewingDate");
   renderSteps(data.Timeline);
+}
+
+function clearCurrentData() {
+  [
+    "value-rfid", "value-customer", "value-po", "value-product-code", "value-item",
+    "value-size", "value-art", "value-color", "value-season", "value-factory",
+    "value-line", "value-production-order", "value-cut-table", "value-lot",
+    "value-sewing-date",
+  ].forEach((id) => { byId(id).textContent = "—"; });
+  renderSteps([]);
+  const image = byId("product-image");
+  image.src = FALLBACK_IMAGE;
+  image.classList.remove("loading", "run-out-left", "run-out-right", "run-in-left", "run-in-right");
+  image.closest(".image-stage").style.removeProperty("--image-aspect");
+  byId("image-loading").hidden = true;
+  setNotice("");
 }
 
 async function getJson(url) {
@@ -328,6 +345,7 @@ async function search(rfid, trackStatus = false) {
   state.imageAvailability = { front: false, back: false };
   stopImageRotation();
   cancelImageTransition();
+  clearCurrentData();
   setQueryStatus("Đang tra cứu ...");
   setNotice("Đang tải thông tin…", "loading");
   try {

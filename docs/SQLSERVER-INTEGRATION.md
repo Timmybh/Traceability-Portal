@@ -11,6 +11,8 @@ Nguồn dữ liệu đã xác định:
 
 Trình duyệt sẽ gọi API trung gian. API chạy trong mạng nội bộ, đọc câu lệnh từ `SQLQUERY`, bind giá trị RFID vào tham số `@RFID` rồi trả JSON cho giao diện. Không nối trực tiếp RFID vào chuỗi SQL. Tài khoản SQL Server chỉ nằm trong `.env` của backend, tuyệt đối không đưa vào frontend.
 
+Mỗi lần đọc dữ liệu, backend đặt transaction isolation level là `READ COMMITTED`. Không thêm `WITH (NOLOCK)` hoặc `READUNCOMMITTED` vào `SQLQUERY`, vì các hint này có thể trả dữ liệu bẩn hoặc không nhất quán.
+
 Giá trị cấu hình:
 
 ```dotenv

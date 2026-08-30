@@ -59,3 +59,17 @@ test("IIS frontend uses the Dong Tien logo, empty image state, and three trace t
   assert.doesNotMatch(script, /FALLBACK_IMAGE|jacket-line\.png/);
   assert.match(script, /\/api\/traceability\/\$\{type\}/);
 });
+
+test("timeline hides the content column and uses an icon-only document preview", async () => {
+  const [html, script, styles] = await Promise.all([
+    read("iis/frontend/index.html"),
+    read("iis/frontend/assets/app.js"),
+    read("iis/frontend/assets/styles.css"),
+  ]);
+
+  assert.doesNotMatch(html, /NỘI DUNG\s*\/\s*CONTENT/);
+  assert.doesNotMatch(script, /<span>Xem chứng từ<\/span>/);
+  assert.match(script, /class="preview-link"/);
+  assert.match(script, /aria-label="Xem chứng từ"/);
+  assert.match(styles, /\.preview-link/);
+});

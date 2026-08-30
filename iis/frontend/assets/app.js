@@ -53,6 +53,13 @@ function safeLink(value) {
   }
 }
 
+function previewLink(link) {
+  if (!link) return "—";
+  return `<a class="preview-link" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" aria-label="Xem chứng từ" title="Xem chứng từ">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path><circle cx="12" cy="12" r="2.75"></circle></svg>
+  </a>`;
+}
+
 const lookupState = { po: [], lot: [] };
 
 function activateTraceTab(name) {
@@ -199,8 +206,7 @@ function detailRows(stepNumber, details, initiallyOpen) {
           </div>
         </td>
         <td class="detail-date">${escapeHtml(formatDate(detail.DetailDate))}</td>
-        <td><div class="detail-content" title="${escapeHtml(content)}">${escapeHtml(content)}</div></td>
-        <td>${link ? `<a class="document-link" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer"><span>Xem chứng từ</span><span aria-hidden="true">↗</span></a>` : "—"}</td>
+        <td>${previewLink(link)}</td>
       </tr>`;
   }).join("");
 }
@@ -238,7 +244,7 @@ function inspectionDepartmentRows(stepNumber, details, initiallyOpen) {
     const canExpand = departmentDetails.length > 0;
     return `
       <tr class="department-row" data-parent-step="${stepNumber}" data-department="${department.key}"${initiallyOpen ? "" : " hidden"}>
-        <td colspan="3">
+        <td colspan="2">
           <button class="department-toggle" type="button" data-step="${stepNumber}" data-department="${department.key}" aria-expanded="false"${canExpand ? "" : " disabled"}>
             <span class="department-chevron" aria-hidden="true">›</span>
             <span class="department-icon" aria-hidden="true">${department.icon}</span>
@@ -259,8 +265,7 @@ function inspectionDepartmentRows(stepNumber, details, initiallyOpen) {
               </div>
             </td>
             <td class="detail-date">${escapeHtml(formatDate(detail.DetailDate))}</td>
-            <td><div class="detail-content" title="${escapeHtml(content)}">${escapeHtml(content)}</div></td>
-            <td>${link ? `<a class="document-link" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer"><span>Xem chứng từ</span><span aria-hidden="true">↗</span></a>` : "—"}</td>
+            <td>${previewLink(link)}</td>
           </tr>`;
       }).join("")}`;
   }).join("");
@@ -285,8 +290,7 @@ function renderSteps(timeline = []) {
           </button>
         </td>
         <td>${record ? `<span class="completed">${escapeHtml(date)}</span>` : `<span class="pending">Chờ dữ liệu</span>`}</td>
-        <td>—</td>
-        <td>—</td>
+        <td>${previewLink(safeLink(record?.StepLink))}</td>
       </tr>
       ${step[0] === "04"
         ? inspectionDepartmentRows(step[0], details, initiallyOpen)

@@ -1,5 +1,3 @@
-const FALLBACK_IMAGE = "/assets/jacket-line.png?v=20260829-1";
-
 const steps = [
   ["01", "Phát triển sản phẩm", "Product Development", ""],
   ["02", "Số invoice", "Invoice Number", ""],
@@ -52,6 +50,114 @@ function safeLink(value) {
     return ["http:", "https:"].includes(url.protocol) ? url.href : "";
   } catch (_) {
     return "";
+  }
+}
+
+const lookupState = { po: [], lot: [] };
+
+function activateTraceTab(name) {
+  document.querySelectorAll(".trace-tab").forEach((tab) => {
+    const active = tab.dataset.traceTab === name;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", String(active));
+  });
+  document.querySelectorAll(".trace-panel").forEach((panel) => { panel.hidden = panel.id !== `trace-panel-${name}`; });
+  byId("rfid-search-area").hidden = name !== "rfid";
+  if (name === "rfid") focusScannerInput();
+}
+
+function quantity(value) {
+  if (value == null || value === "") return "—";
+  const number = Number(value);
+  return Number.isFinite(number) ? new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 }).format(number) : escapeHtml(value);
+}
+
+function lookupItems(parent) {
+  return Array.isArray(parent?.Items) ? parent.Items : [];
+}
+
+function renderLookupResults(type, parents, context) {
+  const target = byId(`${type}-results`);
+  lookupState[type] = parents;
+  if (!parents.length) {
+    target.innerHTML = `<div class="lookup-empty">Không tìm thấy dữ liệu phù hợp</div>`;
+    return;
+  }
+
+  target.innerHTML = parents.map((parent, parentIndex) => {
+    const items = lookupItems(parent);
+    const isPo = type === "po";
+    const primary = isPo ? (parent.ProductCode || "—") : (parent.Lot || context.value || "—");
+    const secondary = isPo ? (parent.Season || "—") : context.customer;
+    const customer = isPo ? (parent.CustomerName || context.customer) : `Khách hàng: ${context.customer}`;
+    const itemHeader = isPo ? "Tên hạng mục" : "Hạng mục";
+    return `
+      <article class="lookup-parent" data-lookup-parent="${type}-${parentIndex}">
+        <button class="lookup-parent-toggle" type="button" data-lookup-toggle="${type}-${parentIndex}" aria-expanded="false">
+          <span class="lookup-chevron" aria-hidden="true">›</span>
+          <strong>${escapeHtml(isPo ? `Mã hàng: ${primary}` : `LOT: ${primary}`)}</strong>
+          <span>${escapeHtml(secondary)}</span>
+          <span>${escapeHtml(customer)}</span>
+          <small>${items.length} hạng mục</small>
+        </button>
+        <div class="lookup-children" hidden>
+          <table class="lookup-table">
+            <thead><tr><th>STT</th><th>${itemHeader}</th><th>${isPo ? "Số lượng" : "SL"}</th><th>SL Yard</th><th>Tải danh sách</th></tr></thead>
+            <tbody>${items.map((item, itemIndex) => `
+              <tr>
+                <td>${escapeHtml(item.STT ?? itemIndex + 1)}</td>
+                <td><strong>${escapeHtml(item.ItemName || "—")}</strong></td>
+                <td>${quantity(item.Quantity)}</td>
+                <td>${quantity(item.YardQuantity)}</td>
+                <td><button class="download-list" type="button" data-download-type="${type}" data-parent-index="${parentIndex}" data-item-index="${itemIndex}">Tải danh sách</button></td>
+              </tr>`).join("")}</tbody>
+          </table>
+        </div>
+      </article>`;
+  }).join("");
+}
+
+function downloadLookupItem(type, parentIndex, itemIndex) {
+  const parent = lookupState[type][parentIndex];
+  const item = lookupItems(parent)[itemIndex];
+  if (!parent || !item) return;
+  const rows = [
+    ["STT", "Hạng mục", "Số lượng", "SL Yard"],
+    [item.STT ?? itemIndex + 1, item.ItemName || "", item.Quantity ?? "", item.YardQuantity ?? ""],
+  ];
+  const csv = `\uFEFF${rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\r\n")}`;
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `${type}-${item.DownloadKey || itemIndex + 1}.csv`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+async function searchLookup(type, form) {
+  const formData = new FormData(form);
+  const customer = String(formData.get("customer_code") || "").trim();
+  const valueName = type === "po" ? "po" : "lot";
+  const value = String(formData.get(valueName) || "").trim();
+  const status = byId(`${type}-status`);
+  if (!customer || !value) {
+    status.textContent = "Khách hàng và giá trị truy suất đều bắt buộc.";
+    status.className = "lookup-status error";
+    return;
+  }
+  status.textContent = "Đang tra cứu dữ liệu chính xác…";
+  status.className = "lookup-status";
+  byId(`${type}-results`).innerHTML = `<div class="lookup-empty">Đang tải dữ liệu…</div>`;
+  try {
+    const data = await getJson(`/api/traceability/${type}?customer_code=${encodeURIComponent(customer)}&${valueName}=${encodeURIComponent(value)}`);
+    const parents = type === "po" ? (data.Products || []) : (data.Lots || []);
+    renderLookupResults(type, parents, { customer, value });
+    status.textContent = `Đã tải ${parents.length} kết quả cho ${value}.`;
+    status.className = "lookup-status success";
+  } catch (error) {
+    renderLookupResults(type, [], { customer, value });
+    status.textContent = error.message;
+    status.className = "lookup-status error";
   }
 }
 
@@ -298,10 +404,16 @@ function clearCurrentData() {
   ].forEach((id) => { byId(id).textContent = "—"; });
   renderSteps([]);
   const image = byId("product-image");
-  image.src = FALLBACK_IMAGE;
+  image.removeAttribute("src");
+  image.hidden = true;
   image.classList.remove("loading", "run-out-left", "run-out-right", "run-in-left", "run-in-right");
   image.closest(".image-stage").style.removeProperty("--image-aspect");
   byId("image-loading").hidden = true;
+  byId("image-empty").hidden = false;
+  byId("image-empty").querySelector("strong").textContent = "Chưa có ảnh sản phẩm";
+  byId("image-tabs").hidden = true;
+  byId("previous-image").hidden = true;
+  byId("next-image").hidden = true;
   setNotice("");
 }
 
@@ -325,14 +437,26 @@ function renderImage() {
   document.querySelectorAll(".image-tab").forEach((tab) => tab.classList.toggle("active", tab.dataset.side === state.side));
   const image = byId("product-image");
   const loading = byId("image-loading");
-  loading.hidden = false;
-  image.classList.add("loading");
   if (!state.imageAvailability[state.side]) {
-    image.src = FALLBACK_IMAGE;
-    loading.textContent = "Không có ảnh";
-    image.classList.remove("loading");
+    image.removeAttribute("src");
+    image.hidden = true;
+    loading.hidden = true;
+    byId("image-empty").hidden = false;
+    byId("image-empty").querySelector("strong").textContent = "Không tìm thấy ảnh sản phẩm";
+    byId("image-tabs").hidden = true;
+    byId("previous-image").hidden = true;
+    byId("next-image").hidden = true;
     return;
   }
+  const canRotate = state.imageAvailability.front && state.imageAvailability.back;
+  byId("image-empty").hidden = true;
+  byId("image-tabs").hidden = false;
+  byId("previous-image").hidden = !canRotate;
+  byId("next-image").hidden = !canRotate;
+  document.querySelectorAll(".image-tab").forEach((tab) => { tab.disabled = !state.imageAvailability[tab.dataset.side]; });
+  image.hidden = false;
+  loading.hidden = false;
+  image.classList.add("loading");
   loading.textContent = "Đang tải ảnh…";
   image.src = imageUrl(state.side);
 }
@@ -410,6 +534,7 @@ async function loadImages(rfid, searchId) {
   if (searchId !== state.searchId || rfid !== state.rfid) return;
 
   state.imageAvailability = { front: loaded[0], back: loaded[1] };
+  if (!state.imageAvailability.front && state.imageAvailability.back) state.side = "back";
   renderImage();
   startImageRotation();
   const loadedCount = loaded.filter(Boolean).length;
@@ -477,6 +602,26 @@ document.querySelectorAll(".view-switch button").forEach((tab) => tab.addEventLi
 }));
 byId("previous-image").addEventListener("click", () => transitionImage(state.side === "front" ? "back" : "front", -1));
 byId("next-image").addEventListener("click", () => transitionImage(state.side === "front" ? "back" : "front", 1));
+document.querySelectorAll(".trace-tab").forEach((tab) => tab.addEventListener("click", () => activateTraceTab(tab.dataset.traceTab)));
+["po", "lot"].forEach((type) => {
+  byId(`${type}-search-form`).addEventListener("submit", (event) => {
+    event.preventDefault();
+    searchLookup(type, event.currentTarget);
+  });
+  byId(`${type}-results`).addEventListener("click", (event) => {
+    const toggle = event.target.closest("[data-lookup-toggle]");
+    if (toggle) {
+      const parent = toggle.closest(".lookup-parent");
+      const expanded = toggle.getAttribute("aria-expanded") !== "true";
+      toggle.setAttribute("aria-expanded", String(expanded));
+      parent.classList.toggle("open", expanded);
+      parent.querySelector(".lookup-children").hidden = !expanded;
+      return;
+    }
+    const download = event.target.closest("[data-download-type]");
+    if (download) downloadLookupItem(download.dataset.downloadType, Number(download.dataset.parentIndex), Number(download.dataset.itemIndex));
+  });
+});
 byId("product-image").addEventListener("load", () => {
   const image = byId("product-image");
   byId("image-loading").hidden = true;
@@ -485,7 +630,18 @@ byId("product-image").addEventListener("load", () => {
     image.closest(".image-stage").style.setProperty("--image-aspect", `${image.naturalWidth} / ${image.naturalHeight}`);
   }
 });
-byId("product-image").addEventListener("error", () => { byId("product-image").src = FALLBACK_IMAGE; byId("image-loading").textContent = "Không tải được ảnh"; byId("product-image").classList.remove("loading"); });
+byId("product-image").addEventListener("error", () => {
+  const image = byId("product-image");
+  image.removeAttribute("src");
+  image.hidden = true;
+  image.classList.remove("loading");
+  byId("image-loading").hidden = true;
+  byId("image-empty").hidden = false;
+  byId("image-empty").querySelector("strong").textContent = "Không tải được ảnh sản phẩm";
+  byId("image-tabs").hidden = true;
+  byId("previous-image").hidden = true;
+  byId("next-image").hidden = true;
+});
 
 renderSteps();
 const initialUrl = new URL(window.location.href);

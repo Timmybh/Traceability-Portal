@@ -5,16 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Cổng tra cứu tiến trình sản xuất theo RFID">
   <title>Web Truy suất</title>
-  <link rel="stylesheet" href="/assets/styles.css?v=20260830-1">
+  <link rel="stylesheet" href="/assets/styles.css?v=20260830-2">
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <div class="brand-mark">DT</div>
-      <div class="company"><strong>CÔNG TY CỔ PHẦN ĐỒNG TIẾN</strong><small>DONG TIEN JOINT STOCK COMPANY</small></div>
+      <img class="brand-logo" src="/assets/dong-tien-logo.png?v=20260830-1" alt="Công ty Cổ phần Đồng Tiến">
       <div class="portal"><strong>CỔNG TRUY XUẤT NGUỒN GỐC</strong><small>Product Traceability Portal</small></div>
     </div>
-    <div class="search-area">
+    <div id="rfid-search-area" class="search-area">
       <form id="search-form" class="search-form">
         <span class="search-icon" aria-hidden="true">⌕</span>
         <input id="rfid-input" name="rfid" autocomplete="off" placeholder="Nhập hoặc quét mã RFID ..." aria-label="Mã RFID">
@@ -24,19 +23,30 @@
     </div>
   </header>
 
-  <div id="notice" class="notice" role="status" aria-live="polite"></div>
+  <nav class="trace-tabs" aria-label="Loại truy suất">
+    <button class="trace-tab active" type="button" data-trace-tab="rfid" aria-selected="true">Truy suất RFID</button>
+    <button class="trace-tab" type="button" data-trace-tab="po" aria-selected="false">Truy suất PO</button>
+    <button class="trace-tab" type="button" data-trace-tab="lot" aria-selected="false">Truy suất LOT</button>
+  </nav>
 
-  <main class="dashboard">
+  <section id="trace-panel-rfid" class="trace-panel">
+    <div id="notice" class="notice" role="status" aria-live="polite"></div>
+
+    <main class="dashboard">
     <section class="image-column">
       <h1>Hình ảnh sản phẩm</h1>
       <div class="image-card">
         <div class="image-stage">
-          <button id="previous-image" class="image-arrow left" type="button" aria-label="Ảnh trước">‹</button>
+          <button id="previous-image" class="image-arrow left" type="button" aria-label="Ảnh trước" hidden>‹</button>
           <div id="image-loading" class="image-loading" hidden>Đang tải ảnh…</div>
-          <img id="product-image" src="/assets/jacket-line.png?v=20260829-1" alt="Hình ảnh sản phẩm">
-          <button id="next-image" class="image-arrow right" type="button" aria-label="Ảnh sau">›</button>
+          <div id="image-empty" class="image-empty">
+            <strong>Chưa có ảnh sản phẩm</strong>
+            <small>Nhập hoặc quét RFID để tải ảnh</small>
+          </div>
+          <img id="product-image" alt="Hình ảnh sản phẩm" hidden>
+          <button id="next-image" class="image-arrow right" type="button" aria-label="Ảnh sau" hidden>›</button>
         </div>
-        <div class="image-tabs" role="tablist" aria-label="Mặt sản phẩm">
+        <div id="image-tabs" class="image-tabs" role="tablist" aria-label="Mặt sản phẩm" hidden>
           <button class="image-tab active" type="button" data-side="front">Mặt trước</button>
           <button class="image-tab" type="button" data-side="back">Mặt sau</button>
         </div>
@@ -83,8 +93,35 @@
         <div id="steps-diagram" class="steps-diagram"></div>
       </div>
     </section>
-  </main>
+    </main>
+  </section>
 
-  <script src="/assets/app.js?v=20260830-1" defer></script>
+  <section id="trace-panel-po" class="trace-panel lookup-panel" hidden>
+    <div class="lookup-shell">
+      <div class="lookup-heading"><div><h1>Truy suất theo PO</h1><p>Chọn khách hàng và nhập chính xác số PO cần truy suất.</p></div></div>
+      <form id="po-search-form" class="lookup-form">
+        <label>Khách hàng <span>*</span><input name="customer_code" maxlength="50" required placeholder="Nhập mã khách hàng"></label>
+        <label>PO <span>*</span><input name="po" maxlength="250" required placeholder="Nhập chính xác PO"></label>
+        <button type="submit">Tra cứu PO <span aria-hidden="true">→</span></button>
+      </form>
+      <p id="po-status" class="lookup-status" role="status" aria-live="polite"></p>
+      <div id="po-results" class="lookup-results"><div class="lookup-empty">Chưa có dữ liệu truy suất PO</div></div>
+    </div>
+  </section>
+
+  <section id="trace-panel-lot" class="trace-panel lookup-panel" hidden>
+    <div class="lookup-shell">
+      <div class="lookup-heading"><div><h1>Truy suất theo LOT</h1><p>Chọn khách hàng và nhập chính xác LOT cần truy suất.</p></div></div>
+      <form id="lot-search-form" class="lookup-form">
+        <label>Khách hàng <span>*</span><input name="customer_code" maxlength="50" required placeholder="Nhập mã khách hàng"></label>
+        <label>LOT <span>*</span><input name="lot" maxlength="250" required placeholder="Nhập chính xác LOT"></label>
+        <button type="submit">Tra cứu LOT <span aria-hidden="true">→</span></button>
+      </form>
+      <p id="lot-status" class="lookup-status" role="status" aria-live="polite"></p>
+      <div id="lot-results" class="lookup-results"><div class="lookup-empty">Chưa có dữ liệu truy suất LOT</div></div>
+    </div>
+  </section>
+
+  <script src="/assets/app.js?v=20260830-2" defer></script>
 </body>
 </html>

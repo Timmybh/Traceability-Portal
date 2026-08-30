@@ -43,3 +43,19 @@ test("RM inspection splits details into material and accessory departments", asy
   assert.match(styles, /\.department-row/);
   assert.match(env, /d\.BoPhan AS Department/);
 });
+
+test("IIS frontend uses the Dong Tien logo, empty image state, and three trace tabs", async () => {
+  const [html, script] = await Promise.all([
+    read("iis/frontend/index.html"),
+    read("iis/frontend/assets/app.js"),
+  ]);
+
+  assert.match(html, /dong-tien-logo\.png/);
+  assert.match(html, /Truy suất RFID/);
+  assert.match(html, /Truy suất PO/);
+  assert.match(html, /Truy suất LOT/);
+  assert.match(html, /id="image-empty"/);
+  assert.doesNotMatch(html, /jacket-line\.png/);
+  assert.doesNotMatch(script, /FALLBACK_IMAGE|jacket-line\.png/);
+  assert.match(script, /\/api\/traceability\/\$\{type\}/);
+});

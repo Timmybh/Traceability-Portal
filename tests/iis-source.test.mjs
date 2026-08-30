@@ -27,3 +27,19 @@ test("running status uses the larger green heartbeat treatment", async () => {
   assert.match(styles, /@keyframes status-heartbeat/);
   assert.match(styles, /\.search-record\.is-running\s*\{[^}]*status-heartbeat/);
 });
+
+test("RM inspection splits details into material and accessory departments", async () => {
+  const [script, styles, env] = await Promise.all([
+    read("iis/frontend/assets/app.js"),
+    read("iis/frontend/assets/styles.css"),
+    read("iis/backend/.env.example"),
+  ]);
+
+  assert.match(script, /BỘ PHẬN: NGUYÊN LIỆU/);
+  assert.match(script, /BỘ PHẬN: PHỤ LIỆU/);
+  assert.match(script, /step\[0\] === "04"/);
+  assert.match(script, /detail\.Department/);
+  assert.match(script, /department-count/);
+  assert.match(styles, /\.department-row/);
+  assert.match(env, /d\.BoPhan AS Department/);
+});

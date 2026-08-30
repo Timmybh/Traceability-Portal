@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-type TraceStep = { no: string; name: string; english: string; date?: string; content?: string; link?: string; color: string; detail?: string };
+type DepartmentGroup = { name: string; count: number; icon: string; summary: string };
+type TraceStep = { no: string; name: string; english: string; date?: string; content?: string; link?: string; color: string; detail?: string; departments?: DepartmentGroup[] };
 type QueryStatus = { time: string; message: string; rfid: string };
 
 function currentTime() {
@@ -17,7 +18,10 @@ const steps: TraceStep[] = [
   { no: "01", name: "Phát triển sản phẩm", english: "Product Development", date: "12/11/2025", color: "#4f7df3", detail: "Mẫu và tài liệu kỹ thuật đã được xác nhận." },
   { no: "02", name: "Số invoice", english: "Invoice Number", content: "TNKM26070050", color: "#e9be28", detail: "Chứng từ nhập nguyên phụ liệu." },
   { no: "03", name: "Nhập kho NPL", english: "RM Inbound", date: "09/05/2026", color: "#45ae7c", detail: "Nguyên phụ liệu đã được nhập kho." },
-  { no: "04", name: "Kiểm NPL", english: "RM Inspection", date: "01/08/2026", color: "#e59b28", detail: "Hoàn tất kiểm tra chất lượng đầu vào." },
+  { no: "04", name: "Kiểm NPL", english: "RM Inspection", date: "01/08/2026", color: "#e59b28", detail: "Hoàn tất kiểm tra chất lượng đầu vào.", departments: [
+    { name: "BỘ PHẬN: NGUYÊN LIỆU", count: 1, icon: "🧵", summary: "Danh sách chứng từ kiểm nguyên liệu." },
+    { name: "BỘ PHẬN: PHỤ LIỆU", count: 10, icon: "📦", summary: "Danh sách chứng từ kiểm phụ liệu." },
+  ] },
   { no: "05", name: "Xuất kho NPL", english: "RM Outbound", date: "15/08/2026", color: "#ed7829", detail: "Nguyên phụ liệu đã xuất cho sản xuất." },
   { no: "06", name: "Nhận NPL từ kho", english: "Receive Materials", date: "15/08/2026", color: "#d93e83", detail: "Chuyền sản xuất đã xác nhận nhận vật tư." },
   { no: "07", name: "Xả vải", english: "Fabric Relaxing", date: "15/08/2026", color: "#8e45e8", detail: "Vải đã đủ thời gian xả theo tiêu chuẩn." },
@@ -43,7 +47,8 @@ const info = [
   ["Mã hàng", "Style-CC", "376252"], ["Item", "Item Code", "5726661"], ["Size", "Size", "L"],
   ["Art", "Art Code", "8858322 = 9810034293 LIGHTY RPET BR PAO MM"], ["Màu sắc", "Color", "8977710-LS JERSEY DISCOVER"],
   ["Mùa", "Season", "AW26"], ["Xí nghiệp", "Factory", "1"], ["Chuyền", "Line", "1"], ["Lệnh sản xuất", "Production Order", "NHITY-0386-2026"],
-  ["Bàn cắt", "Cut Table", "N/A"], ["Lot", "Lot No.", "N/A"], ["Ngày may", "Sewing Date", "N/A"],
+  ["Bàn cắt", "Cut Table", "N/A"], ["LOT vải chính", "Main Fabric LOT", "N/A"],
+  ["LOT vải phối", "Contrast Fabric LOT", "N/A"], ["Ngày may", "Sewing Date", "N/A"],
 ];
 
 export default function Home() {
@@ -103,5 +108,10 @@ export default function Home() {
 }
 
 function FragmentRow({ step, open, onToggle }: { step: TraceStep; open: boolean; onToggle: () => void }) {
-  return <><TableRow className="group cursor-pointer border-slate-100 hover:bg-slate-50" onClick={onToggle} aria-expanded={open}><TableCell className="whitespace-normal py-4 pl-5"><div className="flex items-center gap-3">{open ? <ChevronDown className="size-4 shrink-0 text-slate-400" /> : <ChevronRight className="size-4 shrink-0 text-slate-400" />}<span className="grid size-8 shrink-0 place-items-center rounded-full text-xs font-bold text-white shadow-sm" style={{ backgroundColor: step.color }}>{step.no}</span><div><p className="text-base font-bold text-[#142038]">{step.name}</p><p className="sub-label italic">{step.english}</p></div></div></TableCell><TableCell>{step.date ? <span className="date-chip">{step.date}</span> : <span className="font-semibold text-[#4a70ef]">Nhấn để mở</span>}</TableCell><TableCell className="whitespace-normal text-sm text-slate-500">{step.content || "-"}</TableCell><TableCell>{step.link ? <a href={step.link} onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1 text-[#4266e8]">Mở <ExternalLink className="size-3" /></a> : <span className="text-slate-400">-</span>}</TableCell></TableRow>{open && <TableRow className="bg-[#f7f9ff] hover:bg-[#f7f9ff]"><TableCell colSpan={4} className="whitespace-normal px-14 py-4 text-sm text-slate-600"><div className="flex items-start gap-2"><Clipboard className="mt-0.5 size-4 shrink-0 text-[#5074ef]" /><span>{step.detail}</span></div></TableCell></TableRow>}</>;
+  return <><TableRow className="group cursor-pointer border-slate-100 hover:bg-slate-50" onClick={onToggle} aria-expanded={open}><TableCell className="whitespace-normal py-4 pl-5"><div className="flex items-center gap-3">{open ? <ChevronDown className="size-4 shrink-0 text-slate-400" /> : <ChevronRight className="size-4 shrink-0 text-slate-400" />}<span className="grid size-8 shrink-0 place-items-center rounded-full text-xs font-bold text-white shadow-sm" style={{ backgroundColor: step.color }}>{step.no}</span><div><p className="text-base font-bold text-[#142038]">{step.name}</p><p className="sub-label italic">{step.english}</p></div></div></TableCell><TableCell>{step.date ? <span className="date-chip">{step.date}</span> : <span className="font-semibold text-[#4a70ef]">Nhấn để mở</span>}</TableCell><TableCell className="whitespace-normal text-sm text-slate-500">{step.content || "-"}</TableCell><TableCell>{step.link ? <a href={step.link} onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1 text-[#4266e8]">Mở <ExternalLink className="size-3" /></a> : <span className="text-slate-400">-</span>}</TableCell></TableRow>{open && (step.departments ? step.departments.map((department) => <DepartmentRow key={department.name} department={department} />) : <TableRow className="bg-[#f7f9ff] hover:bg-[#f7f9ff]"><TableCell colSpan={4} className="whitespace-normal px-14 py-4 text-sm text-slate-600"><div className="flex items-start gap-2"><Clipboard className="mt-0.5 size-4 shrink-0 text-[#5074ef]" /><span>{step.detail}</span></div></TableCell></TableRow>)}</>;
+}
+
+function DepartmentRow({ department }: { department: DepartmentGroup }) {
+  const [open, setOpen] = useState(false);
+  return <><TableRow className="bg-[#f5f7fb] hover:bg-[#f0f4fa]"><TableCell colSpan={3} className="border-l-4 border-[#6f96ff] py-4 pl-14"><button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center gap-3 text-left"><ChevronRight className={`size-4 shrink-0 text-slate-500 transition-transform ${open ? "rotate-90" : ""}`} /><span aria-hidden="true" className="text-lg">{department.icon}</span><strong className="text-sm text-[#172239]">{department.name}</strong></button></TableCell><TableCell className="text-right"><span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">{department.count} bản ghi</span></TableCell></TableRow>{open && <TableRow className="bg-[#fbfdff] hover:bg-[#f7faff]"><TableCell colSpan={4} className="border-l-4 border-[#6f96ff] py-4 pl-20 text-sm text-slate-600"><div className="flex items-start gap-2"><Clipboard className="mt-0.5 size-4 shrink-0 text-[#5074ef]" /><span>{department.summary}</span></div></TableCell></TableRow>}</>;
 }

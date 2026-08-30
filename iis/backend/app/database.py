@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 import re
 from typing import Any
 
@@ -30,16 +30,41 @@ def connection_string(settings: Settings) -> str:
     return ";".join(f"{key}={value}" for key, value in values.items()) + ";"
 
 
-def _parameterize(query: str, rfid: str) -> tuple[str, Sequence[str]]:
-    count = len(re.findall(r"@RFID\b", query, flags=re.IGNORECASE))
-    if count == 0:
-        raise ValueError("SQL query phải chứa tham số @RFID")
-    prepared = re.sub(r"@RFID\b", "?", query, flags=re.IGNORECASE)
-    return prepared, tuple(rfid for _ in range(count))
+def _parameterize(
+    query: str, parameters: Mapping[str, str]
+) -> tuple[str, Sequence[str]]:
+    normalized = {
+        name.removeprefix("@").casefold(): value for name, value in parameters.items()
+    }
+    if not normalized:
+        raise ValueError("SQL query phải có ít nhất một tham số")
+    if any(not value.strip() for value in normalized.values()):
+        raise ValueError("Giá trị tra cứu không được để trống")
+
+    names = sorted((re.escape(name) for name in normalized), key=len, reverse=True)
+    pattern = re.compile(r"@(" + "|".join(names) + r")\b", flags=re.IGNORECASE)
+    values: list[str] = []
+    matched: set[str] = set()
+
+    def replace(match: re.Match[str]) -> str:
+        name = match.group(1).casefold()
+        matched.add(name)
+        values.append(normalized[name])
+        return "?"
+
+    prepared = pattern.sub(replace, query)
+    missing = sorted(set(normalized) - matched)
+    if missing:
+        raise ValueError(
+            "SQL query thiếu tham số: " + ", ".join(f"@{name}" for name in missing)
+        )
+    return prepared, tuple(values)
 
 
-def query_rows(settings: Settings, query: str, rfid: str) -> list[dict[str, Any]]:
-    prepared, params = _parameterize(query, rfid)
+def query_rows(
+    settings: Settings, query: str, parameters: Mapping[str, str]
+) -> list[dict[str, Any]]:
+    prepared, params = _parameterize(query, parameters)
     with pyodbc.connect(connection_string(settings)) as connection:
         cursor = connection.cursor()
         cursor.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")

@@ -99,6 +99,67 @@ function detailRows(stepNumber, details, initiallyOpen) {
   }).join("");
 }
 
+const inspectionDepartments = [
+  { key: "materials", label: "BỘ PHẬN: NGUYÊN LIỆU", icon: "🧵" },
+  { key: "accessories", label: "BỘ PHẬN: PHỤ LIỆU", icon: "📦" },
+];
+
+function normalizedText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D")
+    .toLowerCase();
+}
+
+function inspectionDepartment(detail) {
+  const department = normalizedText(detail.Department);
+  if (department.includes("phu lieu")) return "accessories";
+  if (department.includes("nguyen lieu")) return "materials";
+
+  // Dữ liệu cũ có thể chưa điền Bộ phận; nội dung chỉ được dùng để phân nhóm dự phòng.
+  const content = normalizedText(detail.DetailContent);
+  return content.includes("phu lieu") ? "accessories" : "materials";
+}
+
+function inspectionDepartmentRows(stepNumber, details, initiallyOpen) {
+  const grouped = new Map(inspectionDepartments.map((department) => [department.key, []]));
+  details.forEach((detail) => grouped.get(inspectionDepartment(detail)).push(detail));
+
+  return inspectionDepartments.map((department) => {
+    const departmentDetails = grouped.get(department.key);
+    const canExpand = departmentDetails.length > 0;
+    return `
+      <tr class="department-row" data-parent-step="${stepNumber}" data-department="${department.key}"${initiallyOpen ? "" : " hidden"}>
+        <td colspan="3">
+          <button class="department-toggle" type="button" data-step="${stepNumber}" data-department="${department.key}" aria-expanded="false"${canExpand ? "" : " disabled"}>
+            <span class="department-chevron" aria-hidden="true">›</span>
+            <span class="department-icon" aria-hidden="true">${department.icon}</span>
+            <strong>${department.label}</strong>
+          </button>
+        </td>
+        <td><span class="department-count">${departmentDetails.length} bản ghi</span></td>
+      </tr>
+      ${departmentDetails.map((detail) => {
+        const content = detail.DetailContent || "—";
+        const link = safeLink(detail.DetailLink);
+        return `
+          <tr class="step-detail-row department-detail-row" data-parent-step="${stepNumber}" data-department="${department.key}" hidden>
+            <td>
+              <div class="detail-title" title="${escapeHtml(content)}">
+                <span class="document-icon" aria-hidden="true"></span>
+                <strong>${escapeHtml(content)}</strong>
+              </div>
+            </td>
+            <td class="detail-date">${escapeHtml(formatDate(detail.DetailDate))}</td>
+            <td><div class="detail-content" title="${escapeHtml(content)}">${escapeHtml(content)}</div></td>
+            <td>${link ? `<a class="document-link" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer"><span>Xem chứng từ</span><span aria-hidden="true">↗</span></a>` : "—"}</td>
+          </tr>`;
+      }).join("")}`;
+  }).join("");
+}
+
 function renderSteps(timeline = []) {
   const records = timelineByStep(timeline);
   const firstOpenStep = steps.find((step) => (records.get(step[0])?.Details || []).length)?.[0];
@@ -121,7 +182,9 @@ function renderSteps(timeline = []) {
         <td>—</td>
         <td>—</td>
       </tr>
-      ${detailRows(step[0], details, initiallyOpen)}`;
+      ${step[0] === "04"
+        ? inspectionDepartmentRows(step[0], details, initiallyOpen)
+        : detailRows(step[0], details, initiallyOpen)}`;
   }).join("");
 
   document.querySelectorAll(".step-toggle:not(:disabled)").forEach((button) => button.addEventListener("click", () => {
@@ -129,7 +192,22 @@ function renderSteps(timeline = []) {
     const expanded = button.getAttribute("aria-expanded") !== "true";
     button.setAttribute("aria-expanded", String(expanded));
     button.closest(".step-parent-row").classList.toggle("is-open", expanded);
-    document.querySelectorAll(`.step-detail-row[data-parent-step="${stepNumber}"]`).forEach((row) => {
+    document.querySelectorAll(`[data-parent-step="${stepNumber}"]`).forEach((row) => {
+      row.hidden = !expanded;
+    });
+    if (expanded && stepNumber === "04") {
+      document.querySelectorAll(`.department-detail-row[data-parent-step="${stepNumber}"]`).forEach((row) => {
+        const groupButton = document.querySelector(`.department-toggle[data-step="${stepNumber}"][data-department="${row.dataset.department}"]`);
+        row.hidden = groupButton?.getAttribute("aria-expanded") !== "true";
+      });
+    }
+  }));
+
+  document.querySelectorAll(".department-toggle:not(:disabled)").forEach((button) => button.addEventListener("click", () => {
+    const expanded = button.getAttribute("aria-expanded") !== "true";
+    button.setAttribute("aria-expanded", String(expanded));
+    button.closest(".department-row").classList.toggle("is-open", expanded);
+    document.querySelectorAll(`.department-detail-row[data-parent-step="${button.dataset.step}"][data-department="${button.dataset.department}"]`).forEach((row) => {
       row.hidden = !expanded;
     });
   }));
@@ -204,7 +282,8 @@ function showData(data) {
   byId("value-line").textContent = field(data, "ChuyenMay", "Chuyen", "Line");
   byId("value-production-order").textContent = field(data, "LenhSanXuat", "ProductionOrder");
   byId("value-cut-table").textContent = field(data, "BanCat", "CutTable");
-  byId("value-lot").textContent = field(data, "Lot");
+  byId("value-main-fabric-lot").textContent = field(data, "LotVaiChinh", "Lot");
+  byId("value-contrast-fabric-lot").textContent = field(data, "LotVaiPhoi");
   byId("value-sewing-date").textContent = field(data, "NgaySanXuat", "NgayMay", "SewingDate");
   renderSteps(data.Timeline);
 }
@@ -213,7 +292,8 @@ function clearCurrentData() {
   [
     "value-rfid", "value-customer", "value-po", "value-product-code", "value-item",
     "value-size", "value-art", "value-color", "value-season", "value-factory",
-    "value-line", "value-production-order", "value-cut-table", "value-lot",
+    "value-line", "value-production-order", "value-cut-table", "value-main-fabric-lot",
+    "value-contrast-fabric-lot",
     "value-sewing-date",
   ].forEach((id) => { byId(id).textContent = "—"; });
   renderSteps([]);

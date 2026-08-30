@@ -83,6 +83,8 @@ if (-not (Test-Path $EnvFile)) {
 # Query là một phần của phiên bản ứng dụng; thông tin đăng nhập trong .env được giữ nguyên.
 Sync-EnvSetting -Name "SQLQUERY" -SourcePath $EnvExampleFile -TargetPath $EnvFile
 Sync-EnvSetting -Name "SQLQUERY_IMAGE" -SourcePath $EnvExampleFile -TargetPath $EnvFile
+Sync-EnvSetting -Name "SQLQUERY_PO" -SourcePath $EnvExampleFile -TargetPath $EnvFile
+Sync-EnvSetting -Name "SQLQUERY_LOT" -SourcePath $EnvExampleFile -TargetPath $EnvFile
 
 if ((Get-Content $EnvFile -Raw) -match "(?m)^SQLSERVER_(HOST|USER|PASSWORD)=\s*$") {
     throw "File .env chưa có đủ SQLSERVER_HOST, SQLSERVER_USER và SQLSERVER_PASSWORD."

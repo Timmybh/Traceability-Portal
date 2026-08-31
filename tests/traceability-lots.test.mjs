@@ -23,8 +23,11 @@ test("SQL query aggregates every distinct matching contrast-fabric LOT", async (
   assert.match(sqlQuery, /m\.Lot AS LotVaiChinh/);
   assert.match(sqlQuery, /phoi\.LotVaiPhoi/);
   assert.match(sqlQuery, /SELECT DISTINCT LTRIM\(RTRIM\(ct\.Lot\)\) AS Lot/);
+  assert.match(sqlQuery, /ct\.ChungLoai=N'Vải phối'/);
+  assert.match(sqlQuery, /ct\.MaHang=CONCAT\(m\.MaHang,N';'\)/);
   assert.match(sqlQuery, /ct\.PO=m\.PO/);
-  assert.match(sqlQuery, /cap\.ProductCode=m\.MaHang/);
-  assert.match(sqlQuery, /cap\.TenCum=m\.ChuyenMay/);
-  assert.match(sqlQuery, /LIKE N'%phối%'/);
+  assert.match(sqlQuery, /ct\.LenhSanXuat=CONCAT\(m\.LenhSanXuat,N';'\)/);
+  assert.match(sqlQuery, /ct\.Size=m\.Size/);
+  assert.doesNotMatch(sqlQuery, /CUTTING_PhieuCapBTP AS cap/);
+  assert.doesNotMatch(sqlQuery, /LIKE N'%phối%'/);
 });

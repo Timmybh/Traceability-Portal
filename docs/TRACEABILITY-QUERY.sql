@@ -84,14 +84,12 @@ OUTER APPLY (
     FROM (
         SELECT DISTINCT LTRIM(RTRIM(ct.Lot)) AS Lot
         FROM dbo.CUTTING_PhieuCapBTP_BarcodeChiTiet AS ct
-        INNER JOIN dbo.CUTTING_PhieuCapBTP AS cap
-            ON cap.SoPhieuCapBTP = ct.SoPhieuCapBTP
-        WHERE ct.Lot IS NOT NULL
-          AND LTRIM(RTRIM(ct.Lot)) <> N''
-          AND LOWER(LTRIM(RTRIM(ISNULL(ct.ChungLoai, N'')))) LIKE N'%phối%'
+        WHERE NULLIF(LTRIM(RTRIM(ct.Lot)), N'') IS NOT NULL
+          AND ct.ChungLoai = N'Vải phối'
+          AND ct.MaHang = CONCAT(m.MaHang, N';')
           AND ct.PO = m.PO
-          AND cap.ProductCode = m.MaHang
-          AND cap.TenCum = m.ChuyenMay
+          AND ct.LenhSanXuat = CONCAT(m.LenhSanXuat, N';')
+          AND ct.Size = m.Size
           AND ISNULL(ct.TraBTP, 0) = 0
     ) AS l
 ) AS phoi;

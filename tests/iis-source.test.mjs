@@ -73,3 +73,16 @@ test("timeline hides the content column and uses an icon-only document preview",
   assert.match(script, /aria-label="Xem chứng từ"/);
   assert.match(styles, /\.preview-link/);
 });
+
+test("PO and LOT tabs include clearly labelled presentation demo data", async () => {
+  const [script, styles] = await Promise.all([
+    read("iis/frontend/assets/app.js"),
+    read("iis/frontend/assets/styles.css"),
+  ]);
+  assert.match(script, /const lookupDemo =/);
+  assert.match(script, /function showLookupDemo\(type\)/);
+  assert.match(script, /Dữ liệu minh họa/);
+  assert.match(script, /Phiếu kiểm định/);
+  assert.match(script, /Hồ sơ thông quan/);
+  assert.match(styles, /\.demo-badge/);
+});

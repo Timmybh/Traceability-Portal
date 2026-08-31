@@ -62,6 +62,56 @@ function previewLink(link) {
 
 const lookupState = { po: [], lot: [] };
 
+const lookupDemo = {
+  po: { customer: "M&S", value: "4524453763", parents: [
+    { ProductCode: "375707", Season: "AW26", CustomerName: "Marks & Spencer", Items: [
+      { STT: 1, ItemName: "Nguyên liệu", Quantity: 12840, YardQuantity: 18652.5, DownloadKey: "materials" },
+      { STT: 2, ItemName: "Phụ liệu", Quantity: 36800, YardQuantity: null, DownloadKey: "accessories" },
+      { STT: 3, ItemName: "Tem RFID", Quantity: 6120, YardQuantity: null, DownloadKey: "rfid-tags" },
+      { STT: 4, ItemName: "Tem SHU", Quantity: 6120, YardQuantity: null, DownloadKey: "shu-tags" },
+      { STT: 5, ItemName: "Hồ sơ kỹ thuật", Quantity: 8, YardQuantity: null, DownloadKey: "technical-files" },
+      { STT: 6, ItemName: "Hồ sơ thông quan", Quantity: 5, YardQuantity: null, DownloadKey: "customs-files" },
+      { STT: 7, ItemName: "Hồ sơ chất lượng", Quantity: 12, YardQuantity: null, DownloadKey: "quality-files" },
+    ] },
+    { ProductCode: "375742", Season: "AW26", CustomerName: "Marks & Spencer", Items: [
+      { STT: 1, ItemName: "Nguyên liệu", Quantity: 8240, YardQuantity: 11906.8, DownloadKey: "materials" },
+      { STT: 2, ItemName: "Phụ liệu", Quantity: 21500, YardQuantity: null, DownloadKey: "accessories" },
+      { STT: 3, ItemName: "Tem RFID", Quantity: 4050, YardQuantity: null, DownloadKey: "rfid-tags" },
+      { STT: 4, ItemName: "Tem SHU", Quantity: 4050, YardQuantity: null, DownloadKey: "shu-tags" },
+      { STT: 5, ItemName: "Hồ sơ kỹ thuật", Quantity: 6, YardQuantity: null, DownloadKey: "technical-files" },
+      { STT: 6, ItemName: "Hồ sơ thông quan", Quantity: 4, YardQuantity: null, DownloadKey: "customs-files" },
+      { STT: 7, ItemName: "Hồ sơ chất lượng", Quantity: 9, YardQuantity: null, DownloadKey: "quality-files" },
+    ] },
+  ] },
+  lot: { customer: "M&S", value: "DE26030463", parents: [
+    { Lot: "DE26030463", Items: [
+      { STT: 1, ItemName: "Phiếu kiểm định", Quantity: 3, YardQuantity: 4258.4, DownloadKey: "inspection-receipts" },
+      { STT: 2, ItemName: "Phiếu nhập hàng", Quantity: 2, YardQuantity: 4258.4, DownloadKey: "goods-receipts" },
+      { STT: 3, ItemName: "Sản phẩm", Quantity: 2, YardQuantity: null, DownloadKey: "products" },
+      { STT: 4, ItemName: "PO", Quantity: 2, YardQuantity: null, DownloadKey: "purchase-orders" },
+      { STT: 5, ItemName: "Hồ sơ chất lượng", Quantity: 9, YardQuantity: null, DownloadKey: "quality-files" },
+    ] },
+    { Lot: "E26030774", Items: [
+      { STT: 1, ItemName: "Phiếu kiểm định", Quantity: 1, YardQuantity: 1680, DownloadKey: "inspection-receipts" },
+      { STT: 2, ItemName: "Phiếu nhập hàng", Quantity: 1, YardQuantity: 1680, DownloadKey: "goods-receipts" },
+      { STT: 3, ItemName: "Sản phẩm", Quantity: 1, YardQuantity: null, DownloadKey: "products" },
+      { STT: 4, ItemName: "PO", Quantity: 1, YardQuantity: null, DownloadKey: "purchase-orders" },
+      { STT: 5, ItemName: "Hồ sơ chất lượng", Quantity: 4, YardQuantity: null, DownloadKey: "quality-files" },
+    ] },
+  ] },
+};
+
+function showLookupDemo(type) {
+  const demo = lookupDemo[type];
+  const form = byId(`${type}-search-form`);
+  form.elements.customer_code.value = demo.customer;
+  form.elements[type].value = demo.value;
+  renderLookupResults(type, demo.parents, { customer: demo.customer, value: demo.value });
+  const status = byId(`${type}-status`);
+  status.innerHTML = `<span class="demo-badge">Dữ liệu minh họa</span> Số liệu dùng để trình diễn giao diện, chưa phải dữ liệu hệ thống.`;
+  status.className = "lookup-status demo";
+}
+
 function activateTraceTab(name) {
   document.querySelectorAll(".trace-tab").forEach((tab) => {
     const active = tab.dataset.traceTab === name;
@@ -71,6 +121,7 @@ function activateTraceTab(name) {
   document.querySelectorAll(".trace-panel").forEach((panel) => { panel.hidden = panel.id !== `trace-panel-${name}`; });
   byId("rfid-search-area").hidden = name !== "rfid";
   if (name === "rfid") focusScannerInput();
+  else if (!lookupState[name].length) showLookupDemo(name);
 }
 
 function quantity(value) {

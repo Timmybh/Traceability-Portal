@@ -26,6 +26,7 @@ const steps = [
 const colors = ["#4f7df3", "#e9be28", "#45ae7c", "#e59b28", "#ed7829", "#d93e83", "#8e45e8", "#596ee8", "#497fe0", "#2b9bb5", "#31a681", "#35a15a"];
 const state = {
   rfid: "",
+  traceMode: "rfid",
   trackedRfid: null,
   side: "front",
   imageAvailability: { front: false, back: false },
@@ -118,9 +119,16 @@ function activateTraceTab(name) {
     tab.classList.toggle("active", active);
     tab.setAttribute("aria-selected", String(active));
   });
-  document.querySelectorAll(".trace-panel").forEach((panel) => { panel.hidden = panel.id !== `trace-panel-${name}`; });
-  byId("rfid-search-area").hidden = name !== "rfid";
-  if (name === "rfid") focusScannerInput();
+  const isRfid = name === "rfid" || name === "rfid-new";
+  document.querySelectorAll(".trace-panel").forEach((panel) => { panel.hidden = panel.id !== (isRfid ? "trace-panel-rfid" : `trace-panel-${name}`); });
+  byId("rfid-search-area").hidden = !isRfid;
+  if (isRfid) {
+    state.traceMode = name;
+    state.searchId += 1;
+    clearCurrentData();
+    setNotice(name === "rfid-new" ? "Tab này sử dụng SQLQUERY_NEW" : "Tab này sử dụng SQLQUERY", "");
+    focusScannerInput();
+  }
   else if (!lookupState[name].length) showLookupDemo(name);
 }
 
@@ -443,8 +451,7 @@ function showData(data) {
   byId("value-line").textContent = field(data, "ChuyenMay", "Chuyen", "Line");
   byId("value-production-order").textContent = field(data, "LenhSanXuat", "ProductionOrder");
   byId("value-cut-table").textContent = field(data, "BanCat", "CutTable");
-  byId("value-main-fabric-lot").textContent = field(data, "LotVaiChinh", "Lot");
-  byId("value-contrast-fabric-lot").textContent = field(data, "LotVaiPhoi");
+  byId("value-lot").textContent = field(data, "Lot", "LotVaiChinh");
   byId("value-sewing-date").textContent = field(data, "NgaySanXuat", "NgayMay", "SewingDate");
   renderSteps(data.Timeline);
 }
@@ -453,8 +460,7 @@ function clearCurrentData() {
   [
     "value-rfid", "value-customer", "value-po", "value-product-code", "value-item",
     "value-size", "value-art", "value-color", "value-season", "value-factory",
-    "value-line", "value-production-order", "value-cut-table", "value-main-fabric-lot",
-    "value-contrast-fabric-lot",
+    "value-line", "value-production-order", "value-cut-table", "value-lot",
     "value-sewing-date",
   ].forEach((id) => { byId(id).textContent = "—"; });
   renderSteps([]);
@@ -609,7 +615,8 @@ async function search(rfid, trackStatus = false) {
   setQueryStatus("Đang tra cứu ...");
   setNotice("Đang tải thông tin…", "loading");
   try {
-    const data = await getJson(`/api/traceability?rfid=${encodeURIComponent(state.rfid)}`);
+    const endpoint = state.traceMode === "rfid-new" ? "/api/traceability/new" : "/api/traceability";
+    const data = await getJson(`${endpoint}?rfid=${encodeURIComponent(state.rfid)}`);
     if (searchId !== state.searchId) return;
     if (!data || Object.keys(data).length === 0) {
       setQueryStatus("Không tìm thấy dữ liệu");

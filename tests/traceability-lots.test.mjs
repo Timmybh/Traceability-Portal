@@ -4,33 +4,26 @@ import test from "node:test";
 
 const root = new URL("..", import.meta.url);
 
-test("renders main and contrast fabric LOT fields", async () => {
+test("renders the LOT field from Tracking_RFID_Master", async () => {
   const html = await readFile(new URL("iis/frontend/index.html", root), "utf8");
   const app = await readFile(new URL("iis/frontend/assets/app.js", root), "utf8");
 
-  assert.match(html, /LOT vải chính/);
-  assert.match(html, /id="value-main-fabric-lot"/);
-  assert.match(html, /LOT vải phối/);
-  assert.match(html, /id="value-contrast-fabric-lot"/);
-  assert.match(app, /field\(data, "LotVaiChinh", "Lot"\)/);
-  assert.match(app, /field\(data, "LotVaiPhoi"\)/);
+  assert.match(html, /id="value-lot"/);
+  assert.match(app, /field\(data, "Lot", "LotVaiChinh"\)/);
+  assert.doesNotMatch(html, /LOT vải chính|LOT vải phối/);
 });
 
-test("SQL query gets factory and fabric LOTs from BTP issue tables", async () => {
+test("SQLQUERY uses tracking tables and preserves the proposed query as SQLQUERY_NEW", async () => {
   const env = await readFile(new URL("iis/backend/.env.example", root), "utf8");
-  const sqlQuery = env.split(/\r?\n/).find((line) => line.startsWith("SQLQUERY=")) ?? "";
+  const lines = env.split(/\r?\n/);
+  const sqlQuery = lines.find((line) => line.startsWith("SQLQUERY=")) ?? "";
+  const sqlQueryNew = lines.find((line) => line.startsWith("SQLQUERY_NEW=")) ?? "";
 
-  assert.match(sqlQuery, /COALESCE\(NULLIF\(btp\.XiNghiep,N''\),m\.XiNghiep\) AS XiNghiep/);
-  assert.match(sqlQuery, /COALESCE\(NULLIF\(btp\.LotVaiChinh,N''\),m\.Lot\) AS LotVaiChinh/);
-  assert.match(sqlQuery, /ct\.ChungLoai=N'Vải chính'/);
-  assert.match(sqlQuery, /INNER JOIN dbo\.CUTTING_PhieuCapBTP AS cap ON cap\.SoPhieuCapBTP=ct\.SoPhieuCapBTP/);
-  assert.match(sqlQuery, /LTRIM\(RTRIM\(cap\.TenPhanXuong\)\)/);
-  assert.match(sqlQuery, /phoi\.LotVaiPhoi/);
-  assert.match(sqlQuery, /SELECT DISTINCT LTRIM\(RTRIM\(ct\.Lot\)\) AS Lot/);
-  assert.match(sqlQuery, /ct\.ChungLoai=N'Vải phối'/);
-  assert.match(sqlQuery, /ct\.MaHang=CONCAT\(m\.MaHang,N';'\)/);
-  assert.match(sqlQuery, /ct\.PO=m\.PO/);
-  assert.match(sqlQuery, /ct\.LenhSanXuat=CONCAT\(m\.LenhSanXuat,N';'\)/);
-  assert.doesNotMatch(sqlQuery, /ct\.Size=m\.Size/);
-  assert.doesNotMatch(sqlQuery, /LIKE N'%phối%'/);
+  assert.match(sqlQuery, /FROM dbo\.Tracking_RFID_Master AS m/);
+  assert.match(sqlQuery, /FROM dbo\.Tracking_RFID_Master_TimeLine AS t/);
+  assert.match(sqlQuery, /FROM dbo\.Tracking_RFID_Master_TimeLine_Detail AS d/);
+  assert.match(sqlQuery, /m\.XiNghiep,m\.ChuyenMay/);
+  assert.match(sqlQuery, /m\.BanCat,m\.Lot,m\.NgaySanXuat/);
+  assert.doesNotMatch(sqlQuery, /CUTTING_PhieuCapBTP|LotVaiChinh|LotVaiPhoi/);
+  assert.match(sqlQueryNew, /CUTTING_PhieuCapBTP/);
 });

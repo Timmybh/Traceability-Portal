@@ -72,12 +72,12 @@ def health() -> dict[str, str]:
         return {"status": "degraded", "database": "unavailable"}
 
 
-@app.get("/api/traceability")
-def traceability(rfid: str = Query(..., min_length=1, max_length=100)):
-    settings = get_settings()
+def _traceability_by_query(rfid: str, query: str | None):
     value = _validate_rfid(rfid)
+    if not query:
+        raise HTTPException(status_code=503, detail="Câu truy vấn chưa được cấu hình")
     try:
-        rows = query_rows(settings, settings.sqlquery, {"RFID": value})
+        rows = query_rows(get_settings(), query, {"RFID": value})
     except (pyodbc.Error, ValueError) as exc:
         raise _database_error(exc) from exc
     if not rows:
@@ -92,6 +92,16 @@ def traceability(rfid: str = Query(..., min_length=1, max_length=100)):
     else:
         result["Timeline"] = []
     return result
+
+
+@app.get("/api/traceability")
+def traceability(rfid: str = Query(..., min_length=1, max_length=100)):
+    return _traceability_by_query(rfid, get_settings().sqlquery)
+
+
+@app.get("/api/traceability/new")
+def traceability_new(rfid: str = Query(..., min_length=1, max_length=100)):
+    return _traceability_by_query(rfid, get_settings().sqlquery_new)
 
 
 @app.get("/api/traceability/po")

@@ -44,7 +44,7 @@ test("RM inspection splits details into material and accessory departments", asy
   assert.match(env, /d\.BoPhan AS Department/);
 });
 
-test("IIS frontend uses the Dong Tien logo, empty image state, and three trace tabs", async () => {
+test("IIS frontend uses the Dong Tien logo, empty image state, and four trace tabs", async () => {
   const [html, script] = await Promise.all([
     read("iis/frontend/index.html"),
     read("iis/frontend/assets/app.js"),
@@ -52,12 +52,25 @@ test("IIS frontend uses the Dong Tien logo, empty image state, and three trace t
 
   assert.match(html, /dong-tien-logo\.png/);
   assert.match(html, /Truy suất RFID/);
+  assert.match(html, /Truy suất RFID mới/);
   assert.match(html, /Truy suất PO/);
   assert.match(html, /Truy suất LOT/);
   assert.match(html, /id="image-empty"/);
   assert.doesNotMatch(html, /jacket-line\.png/);
   assert.doesNotMatch(script, /FALLBACK_IMAGE|jacket-line\.png/);
   assert.match(script, /\/api\/traceability\/\$\{type\}/);
+  assert.match(script, /state\.traceMode === "rfid-new"/);
+  assert.match(script, /"\/api\/traceability\/new"/);
+});
+
+test("new RFID endpoint executes SQLQUERY_NEW", async () => {
+  const [api, config] = await Promise.all([
+    read("iis/backend/app/main.py"),
+    read("iis/backend/app/config.py"),
+  ]);
+  assert.match(config, /sqlquery_new: str \| None = None/);
+  assert.match(api, /@app\.get\("\/api\/traceability\/new"\)/);
+  assert.match(api, /_traceability_by_query\(rfid, get_settings\(\)\.sqlquery_new\)/);
 });
 
 test("timeline hides the content column and uses an icon-only document preview", async () => {

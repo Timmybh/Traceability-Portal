@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 type DepartmentGroup = { name: string; count: number; icon: string; summary: string };
 type TraceStep = { no: string; name: string; english: string; date?: string; content?: string; link?: string; color: string; detail?: string; departments?: DepartmentGroup[] };
 type QueryStatus = { time: string; message: string; rfid: string };
-type TraceMode = "rfid" | "po" | "lot";
+type TraceMode = "rfid" | "rfid-new" | "po" | "lot";
 
 function currentTime() {
   return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date());
@@ -48,8 +48,7 @@ const info = [
   ["Mã hàng", "Style-CC", "376252"], ["Item", "Item Code", "5726661"], ["Size", "Size", "L"],
   ["Art", "Art Code", "8858322 = 9810034293 LIGHTY RPET BR PAO MM"], ["Màu sắc", "Color", "8977710-LS JERSEY DISCOVER"],
   ["Mùa", "Season", "AW26"], ["Xí nghiệp", "Factory", "1"], ["Chuyền", "Line", "1"], ["Lệnh sản xuất", "Production Order", "NHITY-0386-2026"],
-  ["Bàn cắt", "Cut Table", "N/A"], ["LOT vải chính", "Main Fabric LOT", "N/A"],
-  ["LOT vải phối", "Contrast Fabric LOT", "N/A"], ["Ngày may", "Sewing Date", "N/A"],
+  ["Bàn cắt", "Cut Table", "N/A"], ["LOT", "Fabric LOT", "N/A"], ["Ngày may", "Sewing Date", "N/A"],
 ];
 
 export default function Home() {
@@ -82,7 +81,7 @@ export default function Home() {
             <img src="/dong-tien-logo.png" alt="Công ty Cổ phần Đồng Tiến" className="h-auto w-[min(360px,62vw)]" />
             <div className="hidden border-l border-slate-200 pl-5 sm:block"><p className="text-sm font-bold leading-6">CỔNG TRUY XUẤT NGUỒN GỐC</p><p className="text-xs leading-5 text-slate-500">Product Traceability Portal</p></div>
           </div>
-          {traceMode === "rfid" && <div className="w-full max-w-[760px]">
+          {(traceMode === "rfid" || traceMode === "rfid-new") && <div className="w-full max-w-[760px]">
             <form onSubmit={search} className="flex w-full items-center rounded-full border-2 border-[#4c75f2] bg-white p-1.5 shadow-[0_0_0_5px_rgba(76,117,242,.09)]">
               <Search className="ml-3 size-5 shrink-0 text-[#3564ea]" /><input aria-label="Mã RFID" value={rfid} onChange={(e) => setRfid(e.target.value)} placeholder="Nhập hoặc quét mã RFID ..." className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm font-medium outline-none placeholder:text-slate-400 md:text-base" />
               <Button type="submit" className="rounded-full bg-[#3f63e9] px-5 hover:bg-[#3152d1]">Tra cứu <ArrowRight /></Button>
@@ -92,9 +91,9 @@ export default function Home() {
         </div>
       </header>
 
-      <nav className="mx-auto mt-5 flex max-w-[1900px] gap-1 overflow-x-auto border-b border-slate-200 px-5 lg:px-8" aria-label="Loại truy suất">{(["rfid", "po", "lot"] as TraceMode[]).map((mode) => <button key={mode} type="button" onClick={() => setTraceMode(mode)} aria-selected={traceMode === mode} className={`shrink-0 rounded-t-xl px-5 py-3 text-sm font-bold ${traceMode === mode ? "border border-b-white border-slate-200 bg-white text-[#3f63e9]" : "bg-slate-100 text-slate-500"}`}>Truy suất {mode.toUpperCase()}</button>)}</nav>
+      <nav className="mx-auto mt-5 flex max-w-[1900px] gap-1 overflow-x-auto border-b border-slate-200 px-5 lg:px-8" aria-label="Loại truy suất">{(["rfid", "rfid-new", "po", "lot"] as TraceMode[]).map((mode) => <button key={mode} type="button" onClick={() => setTraceMode(mode)} aria-selected={traceMode === mode} className={`shrink-0 rounded-t-xl px-5 py-3 text-sm font-bold ${traceMode === mode ? "border border-b-white border-slate-200 bg-white text-[#3f63e9]" : "bg-slate-100 text-slate-500"}`}>{mode === "rfid-new" ? "Truy suất RFID mới" : `Truy suất ${mode.toUpperCase()}`}</button>)}</nav>
 
-      {traceMode === "rfid" ? <div className="mx-auto grid max-w-[1900px] gap-5 px-5 py-7 lg:grid-cols-[minmax(280px,.95fr)_minmax(310px,.88fr)_minmax(650px,1.9fr)] lg:px-8">
+      {traceMode === "rfid" || traceMode === "rfid-new" ? <div className="mx-auto grid max-w-[1900px] gap-5 px-5 py-7 lg:grid-cols-[minmax(280px,.95fr)_minmax(310px,.88fr)_minmax(650px,1.9fr)] lg:px-8">
         <section className="min-w-0"><h2 className="section-title">Hình ảnh sản phẩm</h2><div className="product-card"><div className="product-image-wrap relative">{normalized && !imageFailed ? <><button type="button" aria-label="Xem mặt trước" onClick={() => setImageSide("front")} className="image-nav left-3"><ChevronLeft /></button><img key={`${normalized}-${imageSide}`} src={`/api/traceability/image?rfid=${encodeURIComponent(normalized)}&side=${imageSide}`} onLoad={(event) => imageLoaded(event.currentTarget.src)} onError={() => setImageFailed(true)} alt={imageSide === "front" ? "Mặt trước sản phẩm" : "Mặt sau sản phẩm"} className="product-image" loading="lazy" decoding="async" fetchPriority="low" /><button type="button" aria-label="Xem mặt sau" onClick={() => setImageSide("back")} className="image-nav right-3"><ChevronRight /></button></> : <div className="grid place-items-center gap-1 text-center text-slate-500"><strong className="text-sm text-slate-700">{imageFailed ? "Không tải được ảnh sản phẩm" : "Chưa có ảnh sản phẩm"}</strong><small>{imageFailed ? "RFID này chưa có ảnh mặt tương ứng" : "Nhập hoặc quét RFID để tải ảnh"}</small></div>}</div>{normalized && !imageFailed && <div className="flex items-center justify-center gap-2 bg-slate-100 py-3"><button type="button" onClick={() => setImageSide("front")} className={imageSide === "front" ? "image-side active" : "image-side"}>Mặt trước</button><button type="button" onClick={() => setImageSide("back")} className={imageSide === "back" ? "image-side active" : "image-side"}>Mặt sau</button></div>}</div></section>
 
         <section className="min-w-0"><h2 className="section-title">Thông tin chung</h2><div className="h-[780px] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-sm scrollbar-thin">

@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Copy, Eye, Search } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Clipboard, Copy, FileSearch, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -55,7 +55,7 @@ export default function Home() {
   const [traceMode, setTraceMode] = useState<TraceMode>("rfid");
   const [rfid, setRfid] = useState("");
   const [activeRfid, setActiveRfid] = useState("");
-  const [expanded, setExpanded] = useState<string | null>("09");
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [imageSide, setImageSide] = useState<"front" | "back">("front");
   const [imageFailed, setImageFailed] = useState(false);
@@ -69,7 +69,7 @@ export default function Home() {
     }
   }, []);
   useEffect(() => { setImageFailed(false); }, [normalized, imageSide]);
-  function search(event: FormEvent) { event.preventDefault(); const value = rfid.trim(); if (!value) return; setQueryStatus({ time: currentTime(), message: "Đang tra cứu ...", rfid: value }); setActiveRfid(value); setRfid(""); window.setTimeout(() => setQueryStatus((current) => current?.rfid === value && current.message === "Đang tra cứu ..." ? { time: currentTime(), message: "Tải dữ liệu xong", rfid: value } : current), 350); }
+  function search(event: FormEvent) { event.preventDefault(); const value = rfid.trim(); if (!value) return; setExpanded(null); setQueryStatus({ time: currentTime(), message: "Đang tra cứu ...", rfid: value }); setActiveRfid(value); setRfid(""); window.setTimeout(() => setQueryStatus((current) => current?.rfid === value && current.message === "Đang tra cứu ..." ? { time: currentTime(), message: "Tải dữ liệu xong", rfid: value } : current), 350); }
   function imageLoaded(source: string) { if (!source.includes("/api/traceability/image")) return; setQueryStatus((current) => current?.rfid === normalized ? { time: currentTime(), message: "Tải ảnh xong", rfid: normalized } : current); }
   async function copyRfid() { await navigator.clipboard.writeText(normalized); setCopied(true); window.setTimeout(() => setCopied(false), 1400); }
 
@@ -120,7 +120,7 @@ function LookupPanel({ type }: { type: "po" | "lot" }) {
 }
 
 function FragmentRow({ step, open, onToggle }: { step: TraceStep; open: boolean; onToggle: () => void }) {
-  return <><TableRow className="group cursor-pointer border-slate-100 hover:bg-slate-50" onClick={onToggle} aria-expanded={open}><TableCell className="whitespace-normal py-4 pl-5"><div className="flex items-center gap-3">{open ? <ChevronDown className="size-4 shrink-0 text-slate-400" /> : <ChevronRight className="size-4 shrink-0 text-slate-400" />}<span className="grid size-8 shrink-0 place-items-center rounded-full text-xs font-bold text-white shadow-sm" style={{ backgroundColor: step.color }}>{step.no}</span><div><p className="text-base font-bold text-[#142038]">{step.name}</p><p className="sub-label italic">{step.english}</p></div></div></TableCell><TableCell>{step.date ? <span className="date-chip">{step.date}</span> : <span className="font-semibold text-[#4a70ef]">Nhấn để mở</span>}</TableCell><TableCell>{step.link ? <a href={step.link} title="Xem chứng từ" aria-label="Xem chứng từ" onClick={(e) => e.stopPropagation()} className="inline-grid size-9 place-items-center rounded-lg border border-blue-200 bg-blue-50 text-[#4266e8] hover:bg-[#4266e8] hover:text-white"><Eye className="size-5" /></a> : <span className="text-slate-400">-</span>}</TableCell></TableRow>{open && (step.departments ? step.departments.map((department) => <DepartmentRow key={department.name} department={department} />) : <TableRow className="bg-[#f7f9ff] hover:bg-[#f7f9ff]"><TableCell colSpan={3} className="whitespace-normal px-14 py-4 text-sm text-slate-600"><div className="flex items-start gap-2"><Clipboard className="mt-0.5 size-4 shrink-0 text-[#5074ef]" /><span>{step.detail}</span></div></TableCell></TableRow>)}</>;
+  return <><TableRow className="group cursor-pointer border-slate-100 hover:bg-slate-50" onClick={onToggle} aria-expanded={open}><TableCell className="whitespace-normal py-4 pl-5"><div className="flex items-center gap-3">{open ? <ChevronDown className="size-4 shrink-0 text-slate-400" /> : <ChevronRight className="size-4 shrink-0 text-slate-400" />}<span className="grid size-8 shrink-0 place-items-center rounded-full text-xs font-bold text-white shadow-sm" style={{ backgroundColor: step.color }}>{step.no}</span><div><p className="text-base font-bold text-[#142038]">{step.name}</p><p className="sub-label italic">{step.english}</p></div></div></TableCell><TableCell>{step.date ? <span className="date-chip">{step.date}</span> : <span className="font-semibold text-[#4a70ef]">Nhấn để mở</span>}</TableCell><TableCell>{step.link ? <a href={step.link} title="Xem chứng từ" aria-label="Xem chứng từ" onClick={(e) => e.stopPropagation()} className="inline-grid size-10 place-items-center rounded-xl border border-blue-200 bg-blue-50 text-[#4266e8] hover:bg-[#4266e8] hover:text-white"><FileSearch className="size-6" /></a> : <span className="text-slate-400">-</span>}</TableCell></TableRow>{open && (step.departments ? step.departments.map((department) => <DepartmentRow key={department.name} department={department} />) : <TableRow className="bg-[#f7f9ff] hover:bg-[#f7f9ff]"><TableCell colSpan={3} className="whitespace-normal px-14 py-4 text-sm text-slate-600"><div className="flex items-start gap-2"><Clipboard className="mt-0.5 size-4 shrink-0 text-[#5074ef]" /><span>{step.detail}</span></div></TableCell></TableRow>)}</>;
 }
 
 function DepartmentRow({ department }: { department: DepartmentGroup }) {

@@ -7,7 +7,7 @@ Nguồn dữ liệu đã xác định:
 - Đơn đặt hàng: `dbo.Bravo_DonDatHangBan_Master`
 - Khách hàng: `dbo.Lib_KhachHang`
 - Khóa tra cứu: `RFID`
-- Tab RFID hiện tại dùng `SQLQUERY`; tab RFID mới dùng `SQLQUERY_NEW` qua endpoint `/api/traceability/new`.
+- Tab RFID hiện tại dùng `SQLQUERY`; tab RFID mới dùng `SQLQUERY_NEW` qua endpoint `/api/traceability/new`. Query mới nối `CUTTING_TemBarcode_TachCay_RFID_Mapping.BarcodeTachCay` với `CUTTING_TemBarcode_TachCay.Code`, không nối với cột `Barcode`. Query mới không đọc bất kỳ bảng tracking nào và tạm trả timeline rỗng.
 
 Trình duyệt sẽ gọi API trung gian. API chạy trong mạng nội bộ, đọc câu lệnh từ `SQLQUERY`, bind giá trị RFID vào tham số `@RFID` rồi trả JSON cho giao diện. Không nối trực tiếp RFID vào chuỗi SQL. Tài khoản SQL Server chỉ nằm trong `.env` của backend, tuyệt đối không đưa vào frontend.
 

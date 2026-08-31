@@ -85,6 +85,14 @@ test("timeline hides the content column and uses an icon-only document preview",
   assert.match(script, /class="preview-link"/);
   assert.match(script, /aria-label="Xem chứng từ"/);
   assert.match(styles, /\.preview-link/);
+  assert.match(script, /<circle cx="16\.5" cy="16\.5" r="3\.5"><\/circle>/);
+});
+
+test("timeline steps start collapsed after each lookup", async () => {
+  const script = await read("iis/frontend/assets/app.js");
+  assert.match(script, /const initiallyOpen = false/);
+  assert.doesNotMatch(script, /firstOpenStep/);
+  assert.match(script, /aria-expanded="\$\{initiallyOpen\}"/);
 });
 
 test("Windows deploy preserves Vietnamese SQL literals as UTF-8", async () => {

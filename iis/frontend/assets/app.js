@@ -57,7 +57,13 @@ function safeLink(value) {
 function previewLink(link) {
   if (!link) return "—";
   return `<a class="preview-link" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" aria-label="Xem chứng từ" title="Xem chứng từ">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path><circle cx="12" cy="12" r="2.75"></circle></svg>
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M13 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8"></path>
+      <path d="M13 2v6h6"></path>
+      <path d="m13 2 6 6v3"></path>
+      <circle cx="16.5" cy="16.5" r="3.5"></circle>
+      <path d="m19 19 3 3"></path>
+    </svg>
   </a>`;
 }
 
@@ -332,12 +338,11 @@ function inspectionDepartmentRows(stepNumber, details, initiallyOpen) {
 
 function renderSteps(timeline = []) {
   const records = timelineByStep(timeline);
-  const firstOpenStep = steps.find((step) => (records.get(step[0])?.Details || []).length)?.[0];
   byId("steps-body").innerHTML = steps.map((step, index) => {
     const record = records.get(step[0]);
     const details = Array.isArray(record?.Details) ? record.Details : [];
     const canExpand = details.length > 0;
-    const initiallyOpen = canExpand && step[0] === firstOpenStep;
+    const initiallyOpen = false;
     const date = formatDate(record?.StepDate);
     return `
       <tr class="step-parent-row${initiallyOpen ? " is-open" : ""}" data-step="${step[0]}">

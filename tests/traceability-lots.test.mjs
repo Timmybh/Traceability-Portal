@@ -13,7 +13,7 @@ test("renders the LOT field from Tracking_RFID_Master", async () => {
   assert.doesNotMatch(html, /LOT vải chính|LOT vải phối/);
 });
 
-test("SQLQUERY uses tracking tables and preserves the proposed query as SQLQUERY_NEW", async () => {
+test("SQLQUERY uses tracking tables and SQLQUERY_NEW uses the cutting mapping chain", async () => {
   const env = await readFile(new URL("iis/backend/.env.example", root), "utf8");
   const lines = env.split(/\r?\n/);
   const sqlQuery = lines.find((line) => line.startsWith("SQLQUERY=")) ?? "";
@@ -25,5 +25,15 @@ test("SQLQUERY uses tracking tables and preserves the proposed query as SQLQUERY
   assert.match(sqlQuery, /m\.XiNghiep,m\.ChuyenMay/);
   assert.match(sqlQuery, /m\.BanCat,m\.Lot,m\.NgaySanXuat/);
   assert.doesNotMatch(sqlQuery, /CUTTING_PhieuCapBTP|LotVaiChinh|LotVaiPhoi/);
-  assert.match(sqlQueryNew, /CUTTING_PhieuCapBTP/);
+  assert.match(sqlQueryNew, /CUTTING_TemBarcode_TachCay_RFID_Mapping/);
+  assert.match(sqlQueryNew, /tc\.Code\s*=\s*mp\.BarcodeTachCay/);
+  assert.match(sqlQueryNew, /d\.SoPhieuCapBTP\s*=\s*cap\.SoPhieuCapBTP/);
+  assert.match(sqlQueryNew, /LIKE N'%phối%'/);
+  assert.match(sqlQueryNew, /Bravo_DonDatHangBan_Master/);
+  assert.match(sqlQueryNew, /Lib_KhachHang/);
+  assert.match(sqlQueryNew, /CUTTING_PhieuCapBTP_ChiTiet/);
+  assert.match(sqlQueryNew, /colorInfo\.TenMau AS Color/);
+  assert.match(sqlQueryNew, /mp\.ThoiGianMap AS NgaySanXuat/);
+  assert.match(sqlQueryNew, /JSON_QUERY\(N'\[\]'\) AS TimelineJson/);
+  assert.doesNotMatch(sqlQueryNew, /Tracking_RFID/);
 });

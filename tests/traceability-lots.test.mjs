@@ -16,11 +16,15 @@ test("renders main and contrast fabric LOT fields", async () => {
   assert.match(app, /field\(data, "LotVaiPhoi"\)/);
 });
 
-test("SQL query aggregates every distinct matching contrast-fabric LOT", async () => {
+test("SQL query gets factory and fabric LOTs from BTP issue tables", async () => {
   const env = await readFile(new URL("iis/backend/.env.example", root), "utf8");
   const sqlQuery = env.split(/\r?\n/).find((line) => line.startsWith("SQLQUERY=")) ?? "";
 
-  assert.match(sqlQuery, /m\.Lot AS LotVaiChinh/);
+  assert.match(sqlQuery, /COALESCE\(NULLIF\(btp\.XiNghiep,N''\),m\.XiNghiep\) AS XiNghiep/);
+  assert.match(sqlQuery, /COALESCE\(NULLIF\(btp\.LotVaiChinh,N''\),m\.Lot\) AS LotVaiChinh/);
+  assert.match(sqlQuery, /ct\.ChungLoai=N'Vải chính'/);
+  assert.match(sqlQuery, /INNER JOIN dbo\.CUTTING_PhieuCapBTP AS cap ON cap\.SoPhieuCapBTP=ct\.SoPhieuCapBTP/);
+  assert.match(sqlQuery, /LTRIM\(RTRIM\(cap\.TenPhanXuong\)\)/);
   assert.match(sqlQuery, /phoi\.LotVaiPhoi/);
   assert.match(sqlQuery, /SELECT DISTINCT LTRIM\(RTRIM\(ct\.Lot\)\) AS Lot/);
   assert.match(sqlQuery, /ct\.ChungLoai=N'Vải phối'/);
@@ -28,6 +32,5 @@ test("SQL query aggregates every distinct matching contrast-fabric LOT", async (
   assert.match(sqlQuery, /ct\.PO=m\.PO/);
   assert.match(sqlQuery, /ct\.LenhSanXuat=CONCAT\(m\.LenhSanXuat,N';'\)/);
   assert.doesNotMatch(sqlQuery, /ct\.Size=m\.Size/);
-  assert.doesNotMatch(sqlQuery, /CUTTING_PhieuCapBTP AS cap/);
   assert.doesNotMatch(sqlQuery, /LIKE N'%phối%'/);
 });

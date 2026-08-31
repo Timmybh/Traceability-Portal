@@ -40,11 +40,11 @@ SELECT
     m.Art,
     m.Color,
     m.Season,
-    m.XiNghiep,
+    COALESCE(NULLIF(btp.XiNghiep, N''), m.XiNghiep) AS XiNghiep,
     m.ChuyenMay,
     m.LenhSanXuat,
     m.BanCat,
-    m.Lot AS LotVaiChinh,
+    COALESCE(NULLIF(btp.LotVaiChinh, N''), m.Lot) AS LotVaiChinh,
     phoi.LotVaiPhoi,
     m.NgaySanXuat,
     JSON_QUERY((
@@ -77,6 +77,38 @@ SELECT
         FOR JSON PATH
     )) AS TimelineJson
 FROM MasterRow AS m
+OUTER APPLY (
+    SELECT
+        (
+            SELECT STRING_AGG(CAST(x.Lot AS nvarchar(max)), N', ')
+                WITHIN GROUP (ORDER BY x.Lot)
+            FROM (
+                SELECT DISTINCT LTRIM(RTRIM(ct.Lot)) AS Lot
+                FROM dbo.CUTTING_PhieuCapBTP_BarcodeChiTiet AS ct
+                WHERE NULLIF(LTRIM(RTRIM(ct.Lot)), N'') IS NOT NULL
+                  AND ct.ChungLoai = N'Vải chính'
+                  AND ct.MaHang = CONCAT(m.MaHang, N';')
+                  AND ct.PO = m.PO
+                  AND ct.LenhSanXuat = CONCAT(m.LenhSanXuat, N';')
+                  AND ISNULL(ct.TraBTP, 0) = 0
+            ) AS x
+        ) AS LotVaiChinh,
+        (
+            SELECT STRING_AGG(CAST(x.TenPhanXuong AS nvarchar(max)), N', ')
+                WITHIN GROUP (ORDER BY x.TenPhanXuong)
+            FROM (
+                SELECT DISTINCT LTRIM(RTRIM(cap.TenPhanXuong)) AS TenPhanXuong
+                FROM dbo.CUTTING_PhieuCapBTP_BarcodeChiTiet AS ct
+                INNER JOIN dbo.CUTTING_PhieuCapBTP AS cap
+                    ON cap.SoPhieuCapBTP = ct.SoPhieuCapBTP
+                WHERE NULLIF(LTRIM(RTRIM(cap.TenPhanXuong)), N'') IS NOT NULL
+                  AND ct.MaHang = CONCAT(m.MaHang, N';')
+                  AND ct.PO = m.PO
+                  AND ct.LenhSanXuat = CONCAT(m.LenhSanXuat, N';')
+                  AND ISNULL(ct.TraBTP, 0) = 0
+            ) AS x
+        ) AS XiNghiep
+) AS btp
 OUTER APPLY (
     SELECT
         STRING_AGG(CAST(l.Lot AS nvarchar(max)), N', ')

@@ -27,7 +27,7 @@ Set-ExecutionPolicy -Scope Process Bypass
 
 Lần đầu script tạo `C:\Apps\WebTruySuat\backend\.env`. Điền `SQLSERVER_HOST`, `SQLSERVER_USER`, `SQLSERVER_PASSWORD`, giữ nguyên các câu query rồi chạy lại script. Các lần deploy sau, script tự đồng bộ `SQLQUERY`, `SQLQUERY_NEW`, `SQLQUERY_IMAGE`, `SQLQUERY_PO` và `SQLQUERY_LOT` từ source mới; thông tin đăng nhập được giữ nguyên.
 
-`SQLQUERY` phục vụ tab Truy suất RFID từ các bảng tracking. `SQLQUERY_NEW` phục vụ tab Truy suất RFID mới qua endpoint `/api/traceability/new`: RFID bắt đầu từ `CUTTING_TemBarcode_TachCay_RFID_Mapping`, nối `CUTTING_TemBarcode_TachCay.Code` để lấy thông tin cắt và LOT chính, rồi nối phiếu cấp BTP để lấy xí nghiệp, chuyền, màu và LOT phối. Màu lấy từ `CUTTING_PhieuCapBTP_ChiTiet.TenMau`; ngày may trên giao diện lấy từ `CUTTING_TemBarcode_TachCay_RFID_Mapping.ThoiGianMap`. `SQLQUERY_NEW` chưa lấy timeline công đoạn và tạm trả `TimelineJson` rỗng cho đến khi xác định được các bảng nguồn mới. `SQLQUERY_IMAGE` chạy riêng để việc tải ảnh không chặn thông tin chung.
+`SQLQUERY` phục vụ tab Truy suất RFID từ các bảng tracking. `SQLQUERY_NEW` phục vụ tab Truy suất RFID mới qua endpoint `/api/traceability/new`: RFID bắt đầu từ `CUTTING_TemBarcode_TachCay_RFID_Mapping`, nối `CUTTING_TemBarcode_TachCay.Code` để lấy thông tin và LOT chính, rồi nối phiếu cấp BTP theo mã hàng, PO và size để lấy xí nghiệp, chuyền, màu và LOT phối. Màu lấy từ `CUTTING_PhieuCapBTP_ChiTiet.TenMau`; ngày may lấy từ `ThoiGianMap` và chỉ hiển thị ngày. Item, Art và cách lấy Bàn cắt đang chờ xác định nguồn đúng. `SQLQUERY_NEW` chưa lấy timeline công đoạn và tạm trả `TimelineJson` rỗng cho đến khi xác định được các bảng nguồn mới.
 
 Named instance:
 

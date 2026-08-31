@@ -45,12 +45,12 @@ SELECT
     CAST(NULL AS nvarchar(200)) AS ItemId,
     NULLIF(LTRIM(RTRIM(tc.TenSize)), N'') AS Size,
     CAST(NULL AS nvarchar(500)) AS Art,
-    colorInfo.TenMau AS Color,
+    cap.TenMau AS Color,
     NULLIF(REPLACE(LTRIM(RTRIM(COALESCE(tc.Mua, cap.SeasonCode))), N';', N''), N'') AS Season,
     COALESCE(NULLIF(LTRIM(RTRIM(cap.TenXiNghiep)), N''), NULLIF(LTRIM(RTRIM(cap.TenPhanXuong)), N'')) AS XiNghiep,
     NULLIF(LTRIM(RTRIM(cap.TenCum)), N'') AS ChuyenMay,
     NULLIF(REPLACE(LTRIM(RTRIM(COALESCE(tc.LenhSanXuat, cap.LenhSanXuat))), N';', N''), N'') AS LenhSanXuat,
-    NULLIF(LTRIM(RTRIM(tc.BanMay)), N'') AS BanCat,
+    CAST(NULL AS nvarchar(500)) AS BanCat,
     NULLIF(LTRIM(RTRIM(tc.Lot)), N'') AS LotVaiChinh,
     contrast.LotVaiPhoi,
     mp.ThoiGianMap AS NgaySanXuat,
@@ -68,18 +68,17 @@ OUTER APPLY (
         p.TenPhanXuong,
         p.TenCum,
         p.SeasonCode,
-        p.LenhSanXuat
+        p.LenhSanXuat,
+        detail.TenMau
     FROM dbo.CUTTING_PhieuCapBTP AS p
+    INNER JOIN dbo.CUTTING_PhieuCapBTP_ChiTiet AS detail
+        ON detail.IdCapBTP = p.IdCapBTP
     WHERE REPLACE(LTRIM(RTRIM(p.ProductCode)), N';', N'') = REPLACE(LTRIM(RTRIM(mp.ProductCode)), N';', N'')
-      AND REPLACE(LTRIM(RTRIM(p.LenhSanXuat)), N';', N'') = REPLACE(LTRIM(RTRIM(tc.LenhSanXuat)), N';', N'')
-      AND EXISTS (
-          SELECT 1
-          FROM dbo.CUTTING_PhieuCapBTP_BarcodeChiTiet AS d
-          WHERE d.SoPhieuCapBTP = p.SoPhieuCapBTP
-            AND d.PO = mp.PO
-            AND ISNULL(d.TraBTP, 0) = 0
-      )
-    ORDER BY p.NgayTao DESC, p.IdCapBTP DESC
+      AND detail.PO = mp.PO
+    ORDER BY
+        CASE WHEN LTRIM(RTRIM(detail.SizeCode)) = LTRIM(RTRIM(tc.TenSize)) THEN 0 ELSE 1 END,
+        p.NgayTao DESC,
+        detail.Id DESC
 ) AS cap
 OUTER APPLY (
     SELECT STRING_AGG(CAST(l.Lot AS nvarchar(max)), N', ')
@@ -94,20 +93,6 @@ OUTER APPLY (
           AND ISNULL(d.TraBTP, 0) = 0
     ) AS l
 ) AS contrast
-OUTER APPLY (
-    SELECT TOP (1) NULLIF(LTRIM(RTRIM(detail.TenMau)), N'') AS TenMau
-    FROM dbo.CUTTING_PhieuCapBTP AS colorCap
-    INNER JOIN dbo.CUTTING_PhieuCapBTP_ChiTiet AS detail
-        ON detail.IdCapBTP = colorCap.IdCapBTP
-    WHERE REPLACE(LTRIM(RTRIM(colorCap.ProductCode)), N';', N'') = REPLACE(LTRIM(RTRIM(mp.ProductCode)), N';', N'')
-      AND REPLACE(LTRIM(RTRIM(colorCap.LenhSanXuat)), N';', N'') = REPLACE(LTRIM(RTRIM(tc.LenhSanXuat)), N';', N'')
-      AND detail.PO = mp.PO
-      AND NULLIF(LTRIM(RTRIM(detail.TenMau)), N'') IS NOT NULL
-    ORDER BY
-        CASE WHEN LTRIM(RTRIM(detail.SizeCode)) = LTRIM(RTRIM(tc.TenSize)) THEN 0 ELSE 1 END,
-        colorCap.NgayTao DESC,
-        detail.Id DESC
-) AS colorInfo
 OUTER APPLY (
     SELECT TOP (1) kh.TenNgan
     FROM dbo.Bravo_DonDatHangBan_Master AS so

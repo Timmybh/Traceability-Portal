@@ -56,7 +56,7 @@ function safeLink(value) {
 
 function previewLink(link) {
   if (!link) return "—";
-  return `<a class="preview-link" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" aria-label="Xem chứng từ" title="Xem chứng từ">
+  return `<a class="preview-link document-preview" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" aria-label="Xem chứng từ" title="Xem chứng từ">
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M13 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8"></path>
       <path d="M13 2v6h6"></path>
@@ -457,7 +457,8 @@ function showData(data) {
   byId("value-production-order").textContent = field(data, "LenhSanXuat", "ProductionOrder");
   byId("value-cut-table").textContent = field(data, "BanCat", "CutTable");
   byId("value-lot").textContent = field(data, "Lot", "LotVaiChinh");
-  byId("value-sewing-date").textContent = field(data, "NgaySanXuat", "NgayMay", "SewingDate");
+  const sewingDate = field(data, "NgaySanXuat", "NgayMay", "SewingDate");
+  byId("value-sewing-date").textContent = state.traceMode === "rfid-new" ? formatDate(sewingDate) : sewingDate;
   renderSteps(data.Timeline);
 }
 

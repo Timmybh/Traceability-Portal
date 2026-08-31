@@ -32,7 +32,10 @@ test("SQLQUERY uses tracking tables and SQLQUERY_NEW uses the cutting mapping ch
   assert.match(sqlQueryNew, /Bravo_DonDatHangBan_Master/);
   assert.match(sqlQueryNew, /Lib_KhachHang/);
   assert.match(sqlQueryNew, /CUTTING_PhieuCapBTP_ChiTiet/);
-  assert.match(sqlQueryNew, /colorInfo\.TenMau AS Color/);
+  assert.match(sqlQueryNew, /cap\.TenMau AS Color/);
+  assert.match(sqlQueryNew, /CAST\(NULL AS nvarchar\(500\)\) AS Art/);
+  assert.match(sqlQueryNew, /CAST\(NULL AS nvarchar\(500\)\) AS BanCat/);
+  assert.doesNotMatch(sqlQueryNew, /Lib_NguyenPhuLieu_Barvo/);
   assert.match(sqlQueryNew, /mp\.ThoiGianMap AS NgaySanXuat/);
   assert.match(sqlQueryNew, /JSON_QUERY\(N'\[\]'\) AS TimelineJson/);
   assert.doesNotMatch(sqlQueryNew, /Tracking_RFID/);

@@ -82,17 +82,34 @@ test("timeline hides the content column and uses an icon-only document preview",
 
   assert.doesNotMatch(html, /NỘI DUNG\s*\/\s*CONTENT/);
   assert.doesNotMatch(script, /<span>Xem chứng từ<\/span>/);
-  assert.match(script, /class="preview-link"/);
+  assert.match(script, /class="preview-link document-preview"/);
   assert.match(script, /aria-label="Xem chứng từ"/);
   assert.match(styles, /\.preview-link/);
   assert.match(script, /<circle cx="16\.5" cy="16\.5" r="3\.5"><\/circle>/);
 });
 
-test("timeline steps start collapsed after each lookup", async () => {
+test("RFID timelines start collapsed after each lookup", async () => {
   const script = await read("iis/frontend/assets/app.js");
   assert.match(script, /const initiallyOpen = false/);
   assert.doesNotMatch(script, /firstOpenStep/);
   assert.match(script, /aria-expanded="\$\{initiallyOpen\}"/);
+});
+
+test("new RFID view keeps the cut table label and formats sewing date without time", async () => {
+  const [html, script] = await Promise.all([
+    read("iis/frontend/index.html"),
+    read("iis/frontend/assets/app.js"),
+  ]);
+  assert.match(html, /Bàn cắt<small>Cut Table<\/small>/);
+  assert.doesNotMatch(html, /Bàn may|Sewing Table/);
+  assert.match(script, /state\.traceMode === "rfid-new" \? formatDate\(sewingDate\) : sewingDate/);
+});
+
+test("both RFID views use the document search preview icon", async () => {
+  const script = await read("iis/frontend/assets/app.js");
+  assert.match(script, /class="preview-link document-preview"/);
+  assert.match(script, /<circle cx="16\.5" cy="16\.5" r="3\.5"><\/circle>/);
+  assert.doesNotMatch(script, /M2\.5 12s3\.5-6 9\.5-6/);
 });
 
 test("Windows deploy preserves Vietnamese SQL literals as UTF-8", async () => {

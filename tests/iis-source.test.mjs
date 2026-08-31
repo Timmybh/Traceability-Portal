@@ -86,3 +86,11 @@ test("PO and LOT tabs include clearly labelled presentation demo data", async ()
   assert.match(script, /Hồ sơ thông quan/);
   assert.match(styles, /\.demo-badge/);
 });
+
+test("general information uses compact bilingual rows without an inner scrollbar", async () => {
+  const styles = await read("iis/frontend/assets/styles.css");
+  assert.match(styles, /grid-template-rows:\s*repeat\(16,minmax\(0,1fr\)\)/);
+  assert.match(styles, /\.info-row small::before\s*\{\s*content:\s*" \/ "/);
+  assert.match(styles, /\.info-card\s*\{[^}]*overflow:\s*hidden/);
+  assert.match(styles, /height:\s*clamp\(440px,calc\(100vh - 265px\),780px\)/);
+});

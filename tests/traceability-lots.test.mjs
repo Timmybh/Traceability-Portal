@@ -27,7 +27,7 @@ test("SQL query aggregates every distinct matching contrast-fabric LOT", async (
   assert.match(sqlQuery, /ct\.MaHang=CONCAT\(m\.MaHang,N';'\)/);
   assert.match(sqlQuery, /ct\.PO=m\.PO/);
   assert.match(sqlQuery, /ct\.LenhSanXuat=CONCAT\(m\.LenhSanXuat,N';'\)/);
-  assert.match(sqlQuery, /ct\.Size=m\.Size/);
+  assert.doesNotMatch(sqlQuery, /ct\.Size=m\.Size/);
   assert.doesNotMatch(sqlQuery, /CUTTING_PhieuCapBTP AS cap/);
   assert.doesNotMatch(sqlQuery, /LIKE N'%phối%'/);
 });

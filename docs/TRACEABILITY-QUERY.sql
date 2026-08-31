@@ -89,7 +89,6 @@ OUTER APPLY (
           AND ct.MaHang = CONCAT(m.MaHang, N';')
           AND ct.PO = m.PO
           AND ct.LenhSanXuat = CONCAT(m.LenhSanXuat, N';')
-          AND ct.Size = m.Size
           AND ISNULL(ct.TraBTP, 0) = 0
     ) AS l
 ) AS phoi;

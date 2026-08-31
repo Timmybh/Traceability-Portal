@@ -74,6 +74,13 @@ test("timeline hides the content column and uses an icon-only document preview",
   assert.match(styles, /\.preview-link/);
 });
 
+test("Windows deploy preserves Vietnamese SQL literals as UTF-8", async () => {
+  const source = await read("iis/deploy/windows/deploy-iis.ps1");
+  assert.match(source, /Get-Content \$SourcePath -Encoding UTF8/);
+  assert.match(source, /Get-Content \$TargetPath -Encoding UTF8/);
+  assert.match(source, /Set-Content -Path \$TargetPath -Value \$targetLines -Encoding UTF8/);
+});
+
 test("PO and LOT tabs include clearly labelled presentation demo data", async () => {
   const [script, styles] = await Promise.all([
     read("iis/frontend/assets/app.js"),

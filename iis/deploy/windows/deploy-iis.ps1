@@ -32,14 +32,14 @@ function Sync-EnvSetting {
         [Parameter(Mandatory = $true)][string]$TargetPath
     )
 
-    $sourceLine = Get-Content $SourcePath |
+    $sourceLine = Get-Content $SourcePath -Encoding UTF8 |
         Where-Object { $_.StartsWith("$Name=", [StringComparison]::OrdinalIgnoreCase) } |
         Select-Object -First 1
     if (-not $sourceLine) { throw "Không tìm thấy $Name trong $SourcePath" }
 
     $found = $false
     $targetLines = @(
-        Get-Content $TargetPath | ForEach-Object {
+        Get-Content $TargetPath -Encoding UTF8 | ForEach-Object {
             if ($_.StartsWith("$Name=", [StringComparison]::OrdinalIgnoreCase)) {
                 $found = $true
                 $sourceLine

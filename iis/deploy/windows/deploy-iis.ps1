@@ -14,7 +14,7 @@ $ProgressPreference = "SilentlyContinue"
 
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator
-)) { throw "Hãy chạy PowerShell bằng Run as administrator." }
+)) { throw "Run PowerShell as administrator." }
 
 $IisSource = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $FrontendSource = Join-Path $IisSource "frontend"
@@ -39,7 +39,7 @@ function Sync-EnvSetting {
     $sourceLine = Get-Content $SourcePath -Encoding UTF8 |
         Where-Object { $_.StartsWith("$Name=", [StringComparison]::OrdinalIgnoreCase) } |
         Select-Object -First 1
-    if (-not $sourceLine) { throw "Không tìm thấy $Name trong $SourcePath" }
+    if (-not $sourceLine) { throw "Cannot find $Name in $SourcePath" }
 
     $found = $false
     $targetLines = @(
@@ -57,16 +57,16 @@ function Sync-EnvSetting {
 }
 
 foreach ($requiredPath in @($PythonExe, $FrontendSource, $BackendSource)) {
-    if (-not (Test-Path $requiredPath)) { throw "Không tìm thấy: $requiredPath" }
+    if (-not (Test-Path $requiredPath)) { throw "Cannot find: $requiredPath" }
 }
 if (-not (Test-Path "$env:SystemRoot\System32\inetsrv\rewrite.dll")) {
-    throw "IIS URL Rewrite chưa được cài đặt."
+    throw "IIS URL Rewrite is not installed."
 }
 if (-not (Test-Path $NssmExe)) {
-    throw "Không tìm thấy NSSM tại $NssmExe. Hãy cài NSSM hoặc truyền -NssmExe."
+    throw "Cannot find NSSM at $NssmExe. Install NSSM or pass -NssmExe."
 }
 
-# Dừng và vô hiệu hóa bản triển khai cũ để không tranh port với tên mới.
+# Stop and disable the legacy deployment so it does not compete for the port.
 $legacyService = Get-Service -Name $LegacyServiceName -ErrorAction SilentlyContinue
 if ($legacyService) {
     if ($legacyService.Status -ne "Stopped") {
@@ -98,11 +98,11 @@ Copy-Item -Path (Join-Path $IisSource "..\docs\TRACEABILITY-NEW-QUERY.sql") -Des
 
 if (-not (Test-Path $EnvFile)) {
     Copy-Item $EnvExampleFile $EnvFile
-    Write-Warning "Đã tạo $EnvFile. Hãy điền SQLSERVER_HOST, SQLSERVER_USER và SQLSERVER_PASSWORD rồi chạy lại script."
+    Write-Warning "Created $EnvFile. Fill in SQLSERVER_HOST, SQLSERVER_USER, and SQLSERVER_PASSWORD, then run the script again."
     return
 }
 
-# Query là một phần của phiên bản ứng dụng; thông tin đăng nhập trong .env được giữ nguyên.
+# Queries are versioned with the application; credentials in .env are preserved.
 Sync-EnvSetting -Name "SQLQUERY" -SourcePath $EnvExampleFile -TargetPath $EnvFile
 Sync-EnvSetting -Name "SQLQUERY_NEW" -SourcePath $EnvExampleFile -TargetPath $EnvFile
 Sync-EnvSetting -Name "SQLQUERY_NEW_FILE" -SourcePath $EnvExampleFile -TargetPath $EnvFile
@@ -113,7 +113,7 @@ Sync-EnvSetting -Name "IMAGE_METADATA_CACHE_SECONDS" -SourcePath $EnvExampleFile
 Sync-EnvSetting -Name "HOSTFILE" -SourcePath $EnvExampleFile -TargetPath $EnvFile
 
 if ((Get-Content $EnvFile -Raw) -match "(?m)^SQLSERVER_(HOST|USER|PASSWORD)=\s*$") {
-    throw "File .env chưa có đủ SQLSERVER_HOST, SQLSERVER_USER và SQLSERVER_PASSWORD."
+    throw "The .env file must define SQLSERVER_HOST, SQLSERVER_USER, and SQLSERVER_PASSWORD."
 }
 
 if (-not (Test-Path $VenvPython)) {

@@ -102,20 +102,19 @@ if (-not (Test-Path $VenvPython)) {
 & $VenvPython -m pip install --upgrade pip
 & $VenvPython -m pip install -r (Join-Path $BackendTarget "requirements.txt")
 
-Import-Module WebAdministration
-if (-not (Get-WebAppPoolState -Name $SiteName -ErrorAction SilentlyContinue)) {
-    New-WebAppPool -Name $SiteName | Out-Null
+$AppCmd = "$env:SystemRoot\System32\inetsrv\appcmd.exe"
+if (-not (& $AppCmd list apppool "/name:$SiteName")) {
+    & $AppCmd add apppool "/name:$SiteName" | Out-Null
 }
-Set-ItemProperty "IIS:\AppPools\$SiteName" -Name managedRuntimeVersion -Value ""
-Set-ItemProperty "IIS:\AppPools\$SiteName" -Name processModel.identityType -Value ApplicationPoolIdentity
+& $AppCmd set apppool "/apppool.name:$SiteName" /managedRuntimeVersion:"" /processModel.identityType:ApplicationPoolIdentity | Out-Null
 
-$site = Get-Website -Name $SiteName -ErrorAction SilentlyContinue
-if (-not $site) {
-    New-Website -Name $SiteName -Port $Port -PhysicalPath $WebRoot -ApplicationPool $SiteName | Out-Null
+if (-not (& $AppCmd list site "/name:$SiteName")) {
+    & $AppCmd add site "/name:$SiteName" "/bindings:http/*:${Port}:" "/physicalPath:$WebRoot" | Out-Null
 } else {
-    Set-ItemProperty "IIS:\Sites\$SiteName" -Name physicalPath -Value $WebRoot
+    & $AppCmd set vdir "$SiteName/" "/physicalPath:$WebRoot" | Out-Null
 }
-& "$env:SystemRoot\System32\inetsrv\appcmd.exe" set config /section:system.webServer/proxy /enabled:true /preserveHostHeader:true | Out-Null
+& $AppCmd set app "$SiteName/" "/applicationPool:$SiteName" | Out-Null
+& $AppCmd set config /section:system.webServer/proxy /enabled:true /preserveHostHeader:true | Out-Null
 
 if (-not $existingService) { & $NssmExe install $ServiceName $VenvPython | Out-Null }
 & $NssmExe set $ServiceName AppDirectory $BackendTarget | Out-Null
@@ -126,7 +125,7 @@ if (-not $existingService) { & $NssmExe install $ServiceName $VenvPython | Out-N
 & $NssmExe set $ServiceName Start SERVICE_AUTO_START | Out-Null
 
 Start-Service -Name $ServiceName
-Start-WebSite -Name $SiteName
+& $AppCmd start site "/site.name:$SiteName" | Out-Null
 Start-Sleep -Seconds 2
 $backendHealth = Invoke-RestMethod "http://127.0.0.1:8000/health"
 $iisHealth = Invoke-RestMethod "http://127.0.0.1:$Port/health"

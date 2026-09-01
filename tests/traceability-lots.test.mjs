@@ -4,13 +4,16 @@ import test from "node:test";
 
 const root = new URL("..", import.meta.url);
 
-test("renders the LOT field from Tracking_RFID_Master", async () => {
+test("renders separate main and contrast fabric LOT fields", async () => {
   const html = await readFile(new URL("iis/frontend/index.html", root), "utf8");
   const app = await readFile(new URL("iis/frontend/assets/app.js", root), "utf8");
 
-  assert.match(html, /id="value-lot"/);
-  assert.match(app, /field\(data, "Lot", "LotVaiChinh"\)/);
-  assert.doesNotMatch(html, /LOT vải chính|LOT vải phối/);
+  assert.match(html, /LOT vải chính<small>Main Fabric LOT<\/small>/);
+  assert.match(html, /id="value-main-lot"/);
+  assert.match(html, /LOT vải phối<small>Contrast Fabric LOT<\/small>/);
+  assert.match(html, /id="value-contrast-lot"/);
+  assert.match(app, /field\(data, "LotVaiChinh", "Lot"\)/);
+  assert.match(app, /field\(data, "LotVaiPhoi"\)/);
 });
 
 test("SQLQUERY uses tracking tables and SQLQUERY_NEW uses the cutting mapping chain", async () => {

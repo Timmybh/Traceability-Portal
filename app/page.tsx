@@ -48,7 +48,8 @@ const info = [
   ["Mã hàng", "Style-CC", "376252"], ["Item", "Item Code", "5726661"], ["Size", "Size", "L"],
   ["Art", "Art Code", "8858322 = 9810034293 LIGHTY RPET BR PAO MM"], ["Màu sắc", "Color", "8977710-LS JERSEY DISCOVER"],
   ["Mùa", "Season", "AW26"], ["Xí nghiệp", "Factory", "1"], ["Chuyền", "Line", "1"], ["Lệnh sản xuất", "Production Order", "NHITY-0386-2026"],
-  ["Bàn cắt", "Cut Table", "N/A"], ["LOT", "Fabric LOT", "N/A"], ["Ngày may", "Sewing Date", "N/A"],
+  ["Bàn cắt", "Cut Table", "N/A"], ["LOT vải chính", "Main Fabric LOT", "N/A"],
+  ["LOT vải phối", "Contrast Fabric LOT", "N/A"], ["Ngày may", "Sewing Date", "N/A"],
 ];
 
 export default function Home() {

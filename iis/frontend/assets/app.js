@@ -456,7 +456,8 @@ function showData(data) {
   byId("value-line").textContent = field(data, "ChuyenMay", "Chuyen", "Line");
   byId("value-production-order").textContent = field(data, "LenhSanXuat", "ProductionOrder");
   byId("value-cut-table").textContent = field(data, "BanCat", "CutTable");
-  byId("value-lot").textContent = field(data, "Lot", "LotVaiChinh");
+  byId("value-main-lot").textContent = field(data, "LotVaiChinh", "Lot");
+  byId("value-contrast-lot").textContent = field(data, "LotVaiPhoi");
   const sewingDate = field(data, "NgaySanXuat", "NgayMay", "SewingDate");
   byId("value-sewing-date").textContent = state.traceMode === "rfid-new" ? formatDate(sewingDate) : sewingDate;
   renderSteps(data.Timeline);
@@ -466,7 +467,8 @@ function clearCurrentData() {
   [
     "value-rfid", "value-customer", "value-po", "value-product-code", "value-item",
     "value-size", "value-art", "value-color", "value-season", "value-factory",
-    "value-line", "value-production-order", "value-cut-table", "value-lot",
+    "value-line", "value-production-order", "value-cut-table", "value-main-lot",
+    "value-contrast-lot",
     "value-sewing-date",
   ].forEach((id) => { byId(id).textContent = "—"; });
   renderSteps([]);

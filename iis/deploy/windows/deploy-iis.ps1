@@ -2,10 +2,10 @@
 param(
     [string]$SiteName = "WebTruySuat",
     [int]$Port = 8374,
-    [string]$InstallRoot = "C:\Apps\WebTruySuat",
-    [string]$WebRoot = "C:\inetpub\wwwroot\WebTruySuat",
-    [string]$PythonExe = "C:\Program Files\Python312\python.exe",
-    [string]$NssmExe = "C:\Tools\nssm\nssm.exe",
+    [string]$InstallRoot = "D:\Apps\Traceability-Portal",
+    [string]$WebRoot = "C:\inetpub\wwwroot\Traceability-Portal",
+    [string]$PythonExe = "D:\Program Files\Python312\python.exe",
+    [string]$NssmExe = "D:\Tools\nssm\nssm.exe",
     [string]$ServiceName = "WebTruySuatBackend"
 )
 

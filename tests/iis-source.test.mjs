@@ -148,6 +148,14 @@ test("Windows deploy preserves Vietnamese SQL literals as UTF-8", async () => {
   assert.match(source, /Set-Content -Path \$TargetPath -Value \$targetLines -Encoding UTF8/);
 });
 
+test("Windows deploy uses the Traceability-Portal directories", async () => {
+  const source = await read("iis/deploy/windows/deploy-iis.ps1");
+  assert.match(source, /D:\\Apps\\Traceability-Portal/);
+  assert.match(source, /C:\\inetpub\\wwwroot\\Traceability-Portal/);
+  assert.doesNotMatch(source, /[CD]:\\Apps\\WebTruySuat/);
+  assert.doesNotMatch(source, /wwwroot\\WebTruySuat/);
+});
+
 test("PO and LOT tabs include clearly labelled presentation demo data", async () => {
   const [script, styles] = await Promise.all([
     read("iis/frontend/assets/app.js"),

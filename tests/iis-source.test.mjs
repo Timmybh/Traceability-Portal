@@ -25,7 +25,7 @@ test("lookup status transitions from gray heartbeat to navy data heartbeat then 
   assert.match(script, /classList\.toggle\("has-data", phase === "data" \|\| phase === "complete"\)/);
   assert.match(script, /classList\.toggle\("is-complete", phase === "complete"\)/);
   assert.match(styles, /\.search-record\s*\{[^}]*color:\s*#94a3b8[^}]*status-heartbeat/);
-  assert.match(styles, /\.search-record\.has-data\s*\{[^}]*color:\s*#0f1c38[^}]*status-heartbeat-data/);
+  assert.match(styles, /\.search-record\.has-data\s*\{[^}]*color:\s*#4b55c7[^}]*status-heartbeat-data/);
   assert.match(styles, /@keyframes status-heartbeat[^}]*scale\(1\)/);
   assert.match(styles, /@keyframes status-heartbeat-data[^}]*scale\(1\)/);
   assert.match(styles, /50%\s*\{[^}]*scale\(\.8\)/);

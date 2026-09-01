@@ -53,8 +53,8 @@ SELECT
     COALESCE(NULLIF(LTRIM(RTRIM(cap.TenXiNghiep)), N''), NULLIF(LTRIM(RTRIM(cap.TenPhanXuong)), N'')) AS XiNghiep,
     NULLIF(LTRIM(RTRIM(cap.TenCum)), N'') AS ChuyenMay,
     NULLIF(REPLACE(LTRIM(RTRIM(COALESCE(tc.LenhSanXuat, cap.LenhSanXuat))), N';', N''), N'') AS LenhSanXuat,
-    cutTable.BanCat,
-    NULLIF(LTRIM(RTRIM(tc.Lot)), N'') AS LotVaiChinh,
+    CAST(NULL AS nvarchar(50)) AS BanCat,
+    COALESCE(mainFabric.LotVaiChinh, NULLIF(LTRIM(RTRIM(tc.Lot)), N'')) AS LotVaiChinh,
     contrast.LotVaiPhoi,
     mp.ThoiGianMap AS NgaySanXuat,
     mp.ThoiGianMap,
@@ -66,29 +66,14 @@ INNER JOIN dbo.CUTTING_TemBarcode_TachCay AS tc
     ON tc.Code = mp.BarcodeTachCay
 OUTER APPLY (
     SELECT TOP (1)
-        COALESCE(
-            NULLIF(LTRIM(RTRIM(cutDetail.BanCat_CT)), N''),
-            CONVERT(nvarchar(50), cutDetail.BanCat)
-        ) AS BanCat
-    FROM dbo.CUTTING_DanhSachBarcodeBTP AS exportBarcode
-    INNER JOIN dbo.Cutting_PhieuDieuTietGiacSoDo_ChiTiet AS cutDetail
-        ON cutDetail.Id = exportBarcode.ChiTietPhieuDieuTietId
-       AND (
-            exportBarcode.PhieuDieuTietId IS NULL
-            OR exportBarcode.PhieuDieuTietId = cutDetail.IdPhieu
-       )
-    WHERE exportBarcode.BarCode = tc.Barcode
-    ORDER BY cutDetail.Id DESC
-) AS cutTable
-OUTER APPLY (
-    SELECT TOP (1)
         p.SoPhieuCapBTP,
         p.TenXiNghiep,
         p.TenPhanXuong,
         p.TenCum,
         p.SeasonCode,
         p.LenhSanXuat,
-        detail.TenMau
+        detail.TenMau,
+        detail.Id AS IdCapBTPCT
     FROM dbo.CUTTING_PhieuCapBTP AS p
     INNER JOIN dbo.CUTTING_PhieuCapBTP_ChiTiet AS detail
         ON detail.IdCapBTP = p.IdCapBTP
@@ -100,15 +85,28 @@ OUTER APPLY (
         detail.Id DESC
 ) AS cap
 OUTER APPLY (
+    SELECT TOP (1)
+        NULLIF(LTRIM(RTRIM(d.Lot)), N'') AS LotVaiChinh
+    FROM dbo.CUTTING_PhieuCapBTP_BarcodeChiTiet AS d
+    WHERE d.SoPhieuCapBTP = cap.SoPhieuCapBTP
+      AND d.PO = mp.PO
+      AND d.IdCapBTPCT = cap.IdCapBTPCT
+      AND NULLIF(LTRIM(RTRIM(d.Lot)), N'') IS NOT NULL
+      AND ISNULL(d.TraBTP, 0) = 0
+    ORDER BY d.ThoiGianQuetXuat DESC, d.IdPhieuXuatKhoBTP DESC
+) AS mainFabric
+OUTER APPLY (
     SELECT STRING_AGG(CAST(l.Lot AS nvarchar(max)), N', ')
         WITHIN GROUP (ORDER BY l.Lot) AS LotVaiPhoi
     FROM (
-        SELECT DISTINCT LTRIM(RTRIM(d.Lot)) AS Lot
+        SELECT DISTINCT LTRIM(RTRIM(lotToken.value)) AS Lot
         FROM dbo.CUTTING_PhieuCapBTP_BarcodeChiTiet AS d
+        CROSS APPLY STRING_SPLIT(CAST(d.Lot AS nvarchar(max)), N';') AS lotToken
         WHERE d.SoPhieuCapBTP = cap.SoPhieuCapBTP
           AND d.PO = mp.PO
-          AND NULLIF(LTRIM(RTRIM(d.Lot)), N'') IS NOT NULL
-          AND LOWER(LTRIM(RTRIM(ISNULL(d.ChungLoai, N'')))) LIKE N'%phối%'
+          AND d.IdCapBTPCT = cap.IdCapBTPCT
+          AND NULLIF(LTRIM(RTRIM(lotToken.value)), N'') IS NOT NULL
+          AND LTRIM(RTRIM(lotToken.value)) <> LTRIM(RTRIM(mainFabric.LotVaiChinh))
           AND ISNULL(d.TraBTP, 0) = 0
     ) AS l
 ) AS contrast

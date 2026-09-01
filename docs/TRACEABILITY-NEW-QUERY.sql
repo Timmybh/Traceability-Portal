@@ -158,6 +158,7 @@ OUTER APPLY (
                     ORDER BY documentTypeRow.Id
                 ) AS documentType
                 WHERE TRY_CONVERT(bigint, document.IdMaster) = product.Id
+                  AND LTRIM(RTRIM(document.TrangThai)) = N'Đã ban hành'
                 ORDER BY
                     COALESCE(document.NgayBanHanh, document.NgayTao),
                     document.Id
@@ -172,6 +173,7 @@ OUTER APPLY (
             COUNT_BIG(*) AS DocumentCount
         FROM dbo.TEC_ThongTinTaiLieukyThuat AS document
         WHERE TRY_CONVERT(bigint, document.IdMaster) = product.Id
+          AND LTRIM(RTRIM(document.TrangThai)) = N'Đã ban hành'
     ) AS documentSummary
     WHERE REPLACE(LTRIM(RTRIM(CONVERT(nvarchar(255), product.ProductCode))), N';', N'') =
           REPLACE(LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode))), N';', N'')

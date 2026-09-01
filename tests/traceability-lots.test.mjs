@@ -53,6 +53,11 @@ test("SQLQUERY uses tracking tables and SQLQUERY_NEW uses the cutting mapping ch
   assert.match(sqlQueryNew, /TEC_ProductInformation AS product/);
   assert.match(sqlQueryNew, /TEC_LoaiTaiLieuKyThuat AS documentTypeRow/);
   assert.match(sqlQueryNew, /TRY_CONVERT\(bigint, document\.IdMaster\)\s*=\s*product\.Id/);
+  assert.equal(
+    (sqlQueryNew.match(/LTRIM\(RTRIM\(document\.TrangThai\)\) = N'Đã ban hành'/g) || []).length,
+    2,
+    "published-document filtering must apply to both details and summary",
+  );
   assert.match(sqlQueryNew, /product\.ProductCode/);
   assert.match(sqlQueryNew, /product\.SeasonCode/);
   assert.match(sqlQueryNew, /1 AS StepNo/);

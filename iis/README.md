@@ -6,7 +6,7 @@
 - IIS URL Rewrite + ARR chuyển `/api/*` đến FastAPI tại `127.0.0.1:8000`.
 - FastAPI bind RFID vào tham số `@RFID` của `SQLQUERY`, đọc thông tin chung và timeline từ SQL Server.
 - Sau khi dữ liệu chính trả về, frontend tải song song ảnh mặt trước/mặt sau qua API ảnh riêng; backend stream ảnh nội bộ về cùng tên miền.
-- NSSM chạy backend như Windows Service, tự khởi động cùng Windows.
+- NSSM chạy backend dưới service `TraceabilityPortalBackend`, tự khởi động cùng Windows. IIS site và App Pool dùng tên `Traceability-Portal`.
 
 ## Yêu cầu Windows Server
 

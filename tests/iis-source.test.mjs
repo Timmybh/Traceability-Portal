@@ -154,6 +154,10 @@ test("Windows deploy uses the Traceability-Portal directories", async () => {
   assert.match(source, /C:\\inetpub\\wwwroot\\Traceability-Portal/);
   assert.doesNotMatch(source, /[CD]:\\Apps\\WebTruySuat/);
   assert.doesNotMatch(source, /wwwroot\\WebTruySuat/);
+  assert.match(source, /\$SiteName = "Traceability-Portal"/);
+  assert.match(source, /\$ServiceName = "TraceabilityPortalBackend"/);
+  assert.match(source, /Set-Service -Name \$LegacyServiceName -StartupType Disabled/);
+  assert.match(source, /stop site "\/site\.name:\$LegacySiteName"/);
 });
 
 test("PO and LOT tabs include clearly labelled presentation demo data", async () => {

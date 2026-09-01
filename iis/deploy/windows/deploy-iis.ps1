@@ -1,12 +1,12 @@
 [CmdletBinding()]
 param(
-    [string]$SiteName = "WebTruySuat",
+    [string]$SiteName = "Traceability-Portal",
     [int]$Port = 8374,
     [string]$InstallRoot = "D:\Apps\Traceability-Portal",
     [string]$WebRoot = "C:\inetpub\wwwroot\Traceability-Portal",
     [string]$PythonExe = "D:\Program Files\Python312\python.exe",
     [string]$NssmExe = "D:\Tools\nssm\nssm.exe",
-    [string]$ServiceName = "WebTruySuatBackend"
+    [string]$ServiceName = "TraceabilityPortalBackend"
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,6 +25,9 @@ $VenvPython = Join-Path $BackendTarget ".venv\Scripts\python.exe"
 $EnvFile = Join-Path $BackendTarget ".env"
 $EnvExampleFile = Join-Path $BackendTarget ".env.example"
 $SqlTarget = Join-Path $BackendTarget "sql"
+$LegacySiteName = "WebTruySuat"
+$LegacyServiceName = "WebTruySuatBackend"
+$AppCmd = "$env:SystemRoot\System32\inetsrv\appcmd.exe"
 
 function Sync-EnvSetting {
     param(
@@ -61,6 +64,22 @@ if (-not (Test-Path "$env:SystemRoot\System32\inetsrv\rewrite.dll")) {
 }
 if (-not (Test-Path $NssmExe)) {
     throw "Không tìm thấy NSSM tại $NssmExe. Hãy cài NSSM hoặc truyền -NssmExe."
+}
+
+# Dừng và vô hiệu hóa bản triển khai cũ để không tranh port với tên mới.
+$legacyService = Get-Service -Name $LegacyServiceName -ErrorAction SilentlyContinue
+if ($legacyService) {
+    if ($legacyService.Status -ne "Stopped") {
+        Stop-Service -Name $LegacyServiceName -Force
+        $legacyService.WaitForStatus("Stopped", [TimeSpan]::FromSeconds(30))
+    }
+    Set-Service -Name $LegacyServiceName -StartupType Disabled
+}
+if (& $AppCmd list site "/name:$LegacySiteName") {
+    & $AppCmd stop site "/site.name:$LegacySiteName" | Out-Null
+}
+if (& $AppCmd list apppool "/name:$LegacySiteName") {
+    & $AppCmd stop apppool "/apppool.name:$LegacySiteName" | Out-Null
 }
 
 $existingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
@@ -102,7 +121,6 @@ if (-not (Test-Path $VenvPython)) {
 & $VenvPython -m pip install --upgrade pip
 & $VenvPython -m pip install -r (Join-Path $BackendTarget "requirements.txt")
 
-$AppCmd = "$env:SystemRoot\System32\inetsrv\appcmd.exe"
 if (-not (& $AppCmd list apppool "/name:$SiteName")) {
     & $AppCmd add apppool "/name:$SiteName" | Out-Null
 }

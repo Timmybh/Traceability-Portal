@@ -43,7 +43,7 @@ test("SQLQUERY uses tracking tables and SQLQUERY_NEW uses the cutting mapping ch
   assert.match(sqlQueryNew, /cap\.TenMau AS Color/);
   assert.match(sqlQueryNew, /CAST\(NULL AS nvarchar\(500\)\) AS Art/);
   assert.match(sqlQueryNew, /Cutting_PhieuDieuTietGiacSoDo_ChiTiet_BanMay AS bm/);
-  assert.match(sqlQueryNew, /INNER JOIN dbo\.Cutting_PhieuDieuTietGiacSoDo_ChiTiet_BanMay AS bm\s+ON bm\.IdBanMay = tc\.IdBanMay/);
+  assert.match(sqlQueryNew, /LEFT JOIN dbo\.Cutting_PhieuDieuTietGiacSoDo_ChiTiet_BanMay AS bm\s+ON CONVERT\(nvarchar\(100\), bm\.IdBanMay\)\s*=\s*CONVERT\(nvarchar\(100\), tc\.IdBanMay\)/);
   assert.match(sqlQueryNew, /bm\.BanCat/);
   assert.doesNotMatch(sqlQueryNew, /tc\.BanMay/);
   assert.doesNotMatch(sqlQueryNew, /cutTable\.BanCat/);
@@ -52,7 +52,7 @@ test("SQLQUERY uses tracking tables and SQLQUERY_NEW uses the cutting mapping ch
   assert.match(sqlQueryNew, /TEC_ThongTinTaiLieukyThuat AS document/);
   assert.match(sqlQueryNew, /TEC_ProductInformation AS product/);
   assert.match(sqlQueryNew, /TEC_LoaiTaiLieuKyThuat AS documentTypeRow/);
-  assert.match(sqlQueryNew, /document\.IdMaster\s*=\s*product\.Id/);
+  assert.match(sqlQueryNew, /TRY_CONVERT\(bigint, document\.IdMaster\)\s*=\s*product\.Id/);
   assert.match(sqlQueryNew, /product\.ProductCode/);
   assert.match(sqlQueryNew, /product\.SeasonCode/);
   assert.match(sqlQueryNew, /1 AS StepNo/);

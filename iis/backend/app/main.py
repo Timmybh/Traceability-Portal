@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 import json
+import logging
 import mimetypes
 from pathlib import Path
 import re
@@ -17,6 +18,9 @@ from fastapi.responses import StreamingResponse
 
 from .config import get_settings
 from .database import connection_string, query_rows
+
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -66,6 +70,7 @@ def _parse_nested_json(result: dict, source_key: str, target_key: str) -> dict:
 
 
 def _database_error(exc: Exception) -> HTTPException:
+    logger.exception("SQL Server query failed", exc_info=exc)
     return HTTPException(status_code=503, detail="Không thể đọc dữ liệu SQL Server")
 
 

@@ -64,8 +64,9 @@ SELECT
 FROM MappingRow AS mp
 INNER JOIN dbo.CUTTING_TemBarcode_TachCay AS tc
     ON tc.Code = mp.BarcodeTachCay
-INNER JOIN dbo.Cutting_PhieuDieuTietGiacSoDo_ChiTiet_BanMay AS bm
-    ON bm.IdBanMay = tc.IdBanMay
+LEFT JOIN dbo.Cutting_PhieuDieuTietGiacSoDo_ChiTiet_BanMay AS bm
+    ON CONVERT(nvarchar(100), bm.IdBanMay) =
+       CONVERT(nvarchar(100), tc.IdBanMay)
 OUTER APPLY (
     SELECT TOP (1)
         p.SoPhieuCapBTP,
@@ -139,23 +140,24 @@ OUTER APPLY (
                     ) AS DetailNo,
                     COALESCE(document.NgayBanHanh, document.NgayTao) AS DetailDate,
                     COALESCE(
-                        NULLIF(LTRIM(RTRIM(document.TenTaiLieu)), N''),
-                        NULLIF(LTRIM(RTRIM(documentType.TenLoai)), N''),
-                        NULLIF(LTRIM(RTRIM(document.TenLoaiTaiLieu)), N''),
-                        document.MaLoaiTaiLieu
+                        NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(max), document.TenTaiLieu))), N''),
+                        NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(max), documentType.TenLoai))), N''),
+                        NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(max), document.TenLoaiTaiLieu))), N''),
+                        CONVERT(nvarchar(max), document.MaLoaiTaiLieu)
                     ) AS DetailContent,
                     CONCAT(N'/api/traceability/document?id=', document.Id) AS DetailLink,
-                    document.MaLoaiTaiLieu AS DocumentCode,
+                    CONVERT(nvarchar(100), document.MaLoaiTaiLieu) AS DocumentCode,
                     document.IdMaster AS DocumentId,
                     document.TrangThai AS DocumentStatus
                 FROM dbo.TEC_ThongTinTaiLieukyThuat AS document
                 OUTER APPLY (
                     SELECT TOP (1) documentTypeRow.TenLoai
                     FROM dbo.TEC_LoaiTaiLieuKyThuat AS documentTypeRow
-                    WHERE documentTypeRow.MaLoai = document.MaLoaiTaiLieu
+                    WHERE CONVERT(nvarchar(100), documentTypeRow.MaLoai) =
+                          CONVERT(nvarchar(100), document.MaLoaiTaiLieu)
                     ORDER BY documentTypeRow.Id
                 ) AS documentType
-                WHERE document.IdMaster = product.Id
+                WHERE TRY_CONVERT(bigint, document.IdMaster) = product.Id
                 ORDER BY
                     COALESCE(document.NgayBanHanh, document.NgayTao),
                     document.Id
@@ -169,12 +171,12 @@ OUTER APPLY (
             MAX(COALESCE(document.NgayBanHanh, document.NgayTao)) AS StepDate,
             COUNT_BIG(*) AS DocumentCount
         FROM dbo.TEC_ThongTinTaiLieukyThuat AS document
-        WHERE document.IdMaster = product.Id
+        WHERE TRY_CONVERT(bigint, document.IdMaster) = product.Id
     ) AS documentSummary
-    WHERE REPLACE(LTRIM(RTRIM(product.ProductCode)), N';', N'') =
-          REPLACE(LTRIM(RTRIM(mp.ProductCode)), N';', N'')
-      AND REPLACE(LTRIM(RTRIM(product.SeasonCode)), N';', N'') =
-          REPLACE(LTRIM(RTRIM(COALESCE(tc.Mua, cap.SeasonCode))), N';', N'')
+    WHERE REPLACE(LTRIM(RTRIM(CONVERT(nvarchar(255), product.ProductCode))), N';', N'') =
+          REPLACE(LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode))), N';', N'')
+      AND REPLACE(LTRIM(RTRIM(CONVERT(nvarchar(255), product.SeasonCode))), N';', N'') =
+          REPLACE(LTRIM(RTRIM(CONVERT(nvarchar(255), COALESCE(tc.Mua, cap.SeasonCode)))), N';', N'')
       AND documentSummary.DocumentCount > 0
 ) AS productDevelopment
 OPTION (RECOMPILE);

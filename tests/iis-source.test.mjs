@@ -158,7 +158,8 @@ test("new technical-document previews are proxied as inline PDF or images", asyn
   assert.match(api, /FROM dbo\.TEC_ThongTinTaiLieukyThuat/);
   assert.match(api, /WHERE Id = @DocumentId/);
   assert.match(api, /Content-Disposition": f"inline;/);
-  assert.match(api, /settings\.document_base_url/);
+  assert.match(api, /f"http:\/\/{settings\.hostfile}\/PhieuDieTiet"/);
+  assert.match(api, /settings\.hostfile/);
   assert.match(api, /base_url\.rstrip\('\/'\)/);
   assert.match(api, /part in \{"\.", "\.\."\} or ":" in part/);
   assert.match(api, /"\.pdf", "\.jpg", "\.jpeg", "\.png"/);

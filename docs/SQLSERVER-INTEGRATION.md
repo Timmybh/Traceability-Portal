@@ -34,7 +34,7 @@ Nguồn ảnh hiện tại là bảng `eGMF.dbo.Tracking_RFID_Master_Image`:
 
 ```dotenv
 SQLQUERY_IMAGE=select top (2) [Id], [RFID], [Url], [RFID_Hex] from [eGMF].[dbo].[Tracking_RFID_Master_Image] where [RFID] = @RFID order by [Id]
-IMAGE_ALLOWED_HOST=10.8.0.72:9231
+HOSTFILE=10.8.0.72:9231
 IMAGE_TIMEOUT_SECONDS=15
 ```
 

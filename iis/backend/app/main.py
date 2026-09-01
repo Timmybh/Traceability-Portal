@@ -282,7 +282,7 @@ def technical_document(document_id: int = Query(..., alias="id", ge=1)):
         document = _technical_document(document_id)
         source = _technical_document_source(document)
         url = _technical_document_url(
-            source, settings.document_base_url, settings.image_allowed_host
+            source, f"http://{settings.hostfile}/PhieuDieTiet", settings.hostfile
         )
         extension = Path(unquote(urlparse(url).path)).suffix.lower()
         allowed_extensions = {
@@ -353,7 +353,7 @@ def product_image(
     try:
         rows = _image_rows(value)
         url = _image_url_for_side(rows, side)
-        _validate_internal_url(url, settings.image_allowed_host)
+        _validate_internal_url(url, settings.hostfile)
         client = httpx.Client(timeout=settings.image_timeout_seconds, follow_redirects=False)
         upstream = client.send(client.build_request("GET", url), stream=True)
         upstream.raise_for_status()

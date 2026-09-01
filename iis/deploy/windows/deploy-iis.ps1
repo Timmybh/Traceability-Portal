@@ -110,7 +110,7 @@ Sync-EnvSetting -Name "SQLQUERY_IMAGE" -SourcePath $EnvExampleFile -TargetPath $
 Sync-EnvSetting -Name "SQLQUERY_PO" -SourcePath $EnvExampleFile -TargetPath $EnvFile
 Sync-EnvSetting -Name "SQLQUERY_LOT" -SourcePath $EnvExampleFile -TargetPath $EnvFile
 Sync-EnvSetting -Name "IMAGE_METADATA_CACHE_SECONDS" -SourcePath $EnvExampleFile -TargetPath $EnvFile
-Sync-EnvSetting -Name "DOCUMENT_BASE_URL" -SourcePath $EnvExampleFile -TargetPath $EnvFile
+Sync-EnvSetting -Name "HOSTFILE" -SourcePath $EnvExampleFile -TargetPath $EnvFile
 
 if ((Get-Content $EnvFile -Raw) -match "(?m)^SQLSERVER_(HOST|USER|PASSWORD)=\s*$") {
     throw "File .env chưa có đủ SQLSERVER_HOST, SQLSERVER_USER và SQLSERVER_PASSWORD."

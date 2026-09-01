@@ -103,7 +103,9 @@ if (-not (Test-Path $VenvPython)) {
 & $VenvPython -m pip install -r (Join-Path $BackendTarget "requirements.txt")
 
 Import-Module WebAdministration
-if (-not (Test-Path "IIS:\AppPools\$SiteName")) { New-WebAppPool -Name $SiteName | Out-Null }
+if (-not (Get-WebAppPoolState -Name $SiteName -ErrorAction SilentlyContinue)) {
+    New-WebAppPool -Name $SiteName | Out-Null
+}
 Set-ItemProperty "IIS:\AppPools\$SiteName" -Name managedRuntimeVersion -Value ""
 Set-ItemProperty "IIS:\AppPools\$SiteName" -Name processModel.identityType -Value ApplicationPoolIdentity
 

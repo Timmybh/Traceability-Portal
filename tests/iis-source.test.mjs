@@ -44,10 +44,10 @@ test("RM inspection splits details into material and accessory departments", asy
 
   assert.match(script, /BỘ PHẬN: NGUYÊN LIỆU/);
   assert.match(script, /BỘ PHẬN: PHỤ LIỆU/);
-  assert.match(script, /step\[0\] === "04"/);
   assert.match(script, /detail\.Department/);
   assert.match(script, /department-count/);
   assert.match(styles, /\.department-row/);
+  assert.match(script, /\["03", "04", "05"\]\.includes\(step\[0\]\)/);
   assert.match(env, /d\.BoPhan AS Department/);
 });
 

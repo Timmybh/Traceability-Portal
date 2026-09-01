@@ -295,7 +295,7 @@ function inspectionDepartment(detail) {
   if (department.includes("phu lieu")) return "accessories";
   if (department.includes("nguyen lieu")) return "materials";
 
-  // Dữ liệu cũ có thể chưa điền Bộ phận; nội dung chỉ được dùng để phân nhóm dự phòng.
+  // Legacy records may omit Department; content is used only as a grouping fallback.
   const content = normalizedText(detail.DetailContent);
   return content.includes("phu lieu") ? "accessories" : "materials";
 }
@@ -356,7 +356,7 @@ function renderSteps(timeline = []) {
         <td>${record ? `<span class="completed">${escapeHtml(date)}</span>` : `<span class="pending">Chờ dữ liệu</span>`}</td>
         <td>${previewLink(safeLink(record?.StepLink))}</td>
       </tr>
-      ${step[0] === "04"
+      ${["03", "04", "05"].includes(step[0])
         ? inspectionDepartmentRows(step[0], details, initiallyOpen)
         : detailRows(step[0], details, initiallyOpen)}`;
   }).join("");
@@ -369,7 +369,7 @@ function renderSteps(timeline = []) {
     document.querySelectorAll(`[data-parent-step="${stepNumber}"]`).forEach((row) => {
       row.hidden = !expanded;
     });
-    if (expanded && stepNumber === "04") {
+    if (expanded && ["03", "04", "05"].includes(stepNumber)) {
       document.querySelectorAll(`.department-detail-row[data-parent-step="${stepNumber}"]`).forEach((row) => {
         const groupButton = document.querySelector(`.department-toggle[data-step="${stepNumber}"][data-department="${row.dataset.department}"]`);
         row.hidden = groupButton?.getAttribute("aria-expanded") !== "true";

@@ -99,14 +99,20 @@ OUTER APPLY (
     SELECT STRING_AGG(CAST(l.Lot AS nvarchar(max)), N', ')
         WITHIN GROUP (ORDER BY l.Lot) AS LotVaiPhoi
     FROM (
-        SELECT DISTINCT LTRIM(RTRIM(lotToken.value)) AS Lot
+        SELECT DISTINCT LTRIM(RTRIM(lotToken.node.value(N'.', N'nvarchar(255)'))) AS Lot
         FROM dbo.CUTTING_PhieuCapBTP_BarcodeChiTiet AS d
-        CROSS APPLY STRING_SPLIT(CAST(d.Lot AS nvarchar(max)), N';') AS lotToken
+        CROSS APPLY (
+            SELECT TRY_CAST(
+                N'<lot>' + REPLACE(CAST(d.Lot AS nvarchar(max)), N';', N'</lot><lot>') + N'</lot>'
+                AS xml
+            ) AS LotXml
+        ) AS lotXml
+        CROSS APPLY lotXml.LotXml.nodes(N'/lot') AS lotToken(node)
         WHERE d.SoPhieuCapBTP = cap.SoPhieuCapBTP
           AND d.PO = mp.PO
           AND d.IdCapBTPCT = cap.IdCapBTPCT
-          AND NULLIF(LTRIM(RTRIM(lotToken.value)), N'') IS NOT NULL
-          AND LTRIM(RTRIM(lotToken.value)) <> LTRIM(RTRIM(mainFabric.LotVaiChinh))
+          AND NULLIF(LTRIM(RTRIM(lotToken.node.value(N'.', N'nvarchar(255)'))), N'') IS NOT NULL
+          AND LTRIM(RTRIM(lotToken.node.value(N'.', N'nvarchar(255)'))) <> LTRIM(RTRIM(mainFabric.LotVaiChinh))
           AND ISNULL(d.TraBTP, 0) = 0
     ) AS l
 ) AS contrast

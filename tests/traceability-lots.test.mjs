@@ -14,10 +14,12 @@ test("renders the LOT field from Tracking_RFID_Master", async () => {
 });
 
 test("SQLQUERY uses tracking tables and SQLQUERY_NEW uses the cutting mapping chain", async () => {
-  const env = await readFile(new URL("iis/backend/.env.example", root), "utf8");
+  const [env, sqlQueryNew] = await Promise.all([
+    readFile(new URL("iis/backend/.env.example", root), "utf8"),
+    readFile(new URL("docs/TRACEABILITY-NEW-QUERY.sql", root), "utf8"),
+  ]);
   const lines = env.split(/\r?\n/);
   const sqlQuery = lines.find((line) => line.startsWith("SQLQUERY=")) ?? "";
-  const sqlQueryNew = lines.find((line) => line.startsWith("SQLQUERY_NEW=")) ?? "";
 
   assert.match(sqlQuery, /FROM dbo\.Tracking_RFID_Master AS m/);
   assert.match(sqlQuery, /FROM dbo\.Tracking_RFID_Master_TimeLine AS t/);
@@ -34,7 +36,9 @@ test("SQLQUERY uses tracking tables and SQLQUERY_NEW uses the cutting mapping ch
   assert.match(sqlQueryNew, /CUTTING_PhieuCapBTP_ChiTiet/);
   assert.match(sqlQueryNew, /cap\.TenMau AS Color/);
   assert.match(sqlQueryNew, /CAST\(NULL AS nvarchar\(500\)\) AS Art/);
-  assert.match(sqlQueryNew, /CAST\(NULL AS nvarchar\(500\)\) AS BanCat/);
+  assert.match(sqlQueryNew, /cutTable\.BanCat/);
+  assert.match(sqlQueryNew, /exportBarcode\.BarCode = tc\.Barcode/);
+  assert.match(sqlQueryNew, /cutDetail\.Id = exportBarcode\.ChiTietPhieuDieuTietId/);
   assert.doesNotMatch(sqlQueryNew, /Lib_NguyenPhuLieu_Barvo/);
   assert.match(sqlQueryNew, /mp\.ThoiGianMap AS NgaySanXuat/);
   assert.match(sqlQueryNew, /JSON_QUERY\(N'\[\]'\) AS TimelineJson/);

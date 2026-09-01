@@ -21,7 +21,10 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.CUTTI
     CREATE INDEX IX_RFIDMapping_RFID_Barcode ON dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping (RFID_Barcode) INCLUDE (RFID, RFID_Hex, BarcodeTachCay, po, productcode, ThoiGianMap, NguoiMap);
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.CUTTING_TemBarcode_TachCay') AND name = N'IX_TemBarcode_Code')
-    CREATE INDEX IX_TemBarcode_Code ON dbo.CUTTING_TemBarcode_TachCay (Code) INCLUDE (TenSize, Mua, LenhSanXuat, Lot);
+    CREATE INDEX IX_TemBarcode_Code ON dbo.CUTTING_TemBarcode_TachCay (Code) INCLUDE (Barcode, TenSize, Mua, LenhSanXuat, Lot);
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.CUTTING_DanhSachBarcodeBTP') AND name = N'IX_DanhSachBarcodeBTP_BarCode')
+    CREATE INDEX IX_DanhSachBarcodeBTP_BarCode ON dbo.CUTTING_DanhSachBarcodeBTP (BarCode) INCLUDE (PhieuDieuTietId, ChiTietPhieuDieuTietId);
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE object_id = OBJECT_ID(N'dbo.CUTTING_PhieuCapBTP_ChiTiet') AND name = N'IX_PhieuCapBTPChiTiet_PO_IdCapBTP')
     CREATE INDEX IX_PhieuCapBTPChiTiet_PO_IdCapBTP ON dbo.CUTTING_PhieuCapBTP_ChiTiet (PO, IdCapBTP) INCLUDE (SizeCode, TenMau, Id);

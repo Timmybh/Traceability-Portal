@@ -71,7 +71,7 @@ test("new RFID endpoint executes SQLQUERY_NEW", async () => {
   assert.match(config, /sqlquery_new: str \| None = None/);
   assert.match(config, /sqlquery_new_file: str \| None = None/);
   assert.match(api, /@app\.get\("\/api\/traceability\/new"\)/);
-  assert.match(api, /_traceability_by_query\(rfid, _new_traceability_query\(\)\)/);
+  assert.match(api, /_traceability_by_query\(rfid, _new_traceability_query\(\), response\)/);
 });
 
 test("new RFID query is seek-oriented and has a production index script", async () => {

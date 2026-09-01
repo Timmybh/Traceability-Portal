@@ -53,7 +53,7 @@ SELECT
     COALESCE(NULLIF(LTRIM(RTRIM(cap.TenXiNghiep)), N''), NULLIF(LTRIM(RTRIM(cap.TenPhanXuong)), N'')) AS XiNghiep,
     NULLIF(LTRIM(RTRIM(cap.TenCum)), N'') AS ChuyenMay,
     NULLIF(REPLACE(LTRIM(RTRIM(COALESCE(tc.LenhSanXuat, cap.LenhSanXuat))), N';', N''), N'') AS LenhSanXuat,
-    CAST(NULL AS nvarchar(500)) AS BanCat,
+    cutTable.BanCat,
     NULLIF(LTRIM(RTRIM(tc.Lot)), N'') AS LotVaiChinh,
     contrast.LotVaiPhoi,
     mp.ThoiGianMap AS NgaySanXuat,
@@ -64,6 +64,22 @@ SELECT
 FROM MappingRow AS mp
 INNER JOIN dbo.CUTTING_TemBarcode_TachCay AS tc
     ON tc.Code = mp.BarcodeTachCay
+OUTER APPLY (
+    SELECT TOP (1)
+        COALESCE(
+            NULLIF(LTRIM(RTRIM(cutDetail.BanCat_CT)), N''),
+            CONVERT(nvarchar(50), cutDetail.BanCat)
+        ) AS BanCat
+    FROM dbo.CUTTING_DanhSachBarcodeBTP AS exportBarcode
+    INNER JOIN dbo.Cutting_PhieuDieuTietGiacSoDo_ChiTiet AS cutDetail
+        ON cutDetail.Id = exportBarcode.ChiTietPhieuDieuTietId
+       AND (
+            exportBarcode.PhieuDieuTietId IS NULL
+            OR exportBarcode.PhieuDieuTietId = cutDetail.IdPhieu
+       )
+    WHERE exportBarcode.BarCode = tc.Barcode
+    ORDER BY cutDetail.Id DESC
+) AS cutTable
 OUTER APPLY (
     SELECT TOP (1)
         p.SoPhieuCapBTP,

@@ -25,10 +25,13 @@ test("lookup status transitions from gray heartbeat to navy data heartbeat then 
   assert.match(script, /classList\.toggle\("has-data", phase === "data" \|\| phase === "complete"\)/);
   assert.match(script, /classList\.toggle\("is-complete", phase === "complete"\)/);
   assert.match(styles, /\.search-record\s*\{[^}]*color:\s*#94a3b8[^}]*status-heartbeat/);
-  assert.match(styles, /\.search-record\.has-data\s*\{[^}]*color:\s*#4b55c7[^}]*status-heartbeat-data/);
-  assert.match(styles, /@keyframes status-heartbeat[^}]*scale\(1\)/);
-  assert.match(styles, /@keyframes status-heartbeat-data[^}]*scale\(1\)/);
-  assert.match(styles, /50%\s*\{[^}]*scale\(\.8\)/);
+  assert.match(styles, /\.search-record\.has-data\s*\{[^}]*color:\s*#4b55c7[^}]*status-found-zoom \.5s[^}]*status-heartbeat 1\.15s[^}]*\.5s infinite/);
+  assert.match(styles, /@keyframes status-heartbeat\s*\{/);
+  assert.match(styles, /50%\s*\{\s*opacity:\s*\.52;\s*\}/);
+  assert.doesNotMatch(styles, /@keyframes status-heartbeat\s*\{[^@]*scale\(/);
+  assert.match(styles, /@keyframes status-found-zoom\s*\{/);
+  assert.match(styles, /from\s*\{[^}]*scale\(1\.2\)/);
+  assert.match(styles, /to\s*\{[^}]*scale\(1\)/);
   assert.match(styles, /\.search-record\.is-complete\s*\{[^}]*animation:\s*none/);
 });
 

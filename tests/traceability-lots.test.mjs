@@ -33,10 +33,10 @@ test("SQLQUERY uses tracking tables and SQLQUERY_NEW uses the cutting mapping ch
   assert.match(sqlQueryNew, /CUTTING_TemBarcode_TachCay_RFID_Mapping/);
   assert.match(sqlQueryNew, /tc\.Code\s*=\s*mp\.BarcodeTachCay/);
   assert.match(sqlQueryNew, /d\.SoPhieuCapBTP\s*=\s*cap\.SoPhieuCapBTP/);
-  assert.match(sqlQueryNew, /lotXml\.LotXml\.nodes\(N'\/lot'\)/);
   assert.match(sqlQueryNew, /d\.IdCapBTPCT\s*=\s*cap\.IdCapBTPCT/);
   assert.match(sqlQueryNew, /mainFabric\.LotVaiChinh/);
-  assert.match(sqlQueryNew, /lotToken\.node\.value\(N'\.', N'nvarchar\(255\)'\)/);
+  assert.match(sqlQueryNew, /bc\.TemBarcodeBTP\s*=\s*tc\.Barcode/);
+  assert.match(sqlQueryNew, /bc\.ChungLoai LIKE N'%phối%'/);
   assert.match(sqlQueryNew, /Bravo_DonDatHangBan_Master/);
   assert.match(sqlQueryNew, /Lib_KhachHang/);
   assert.match(sqlQueryNew, /CUTTING_PhieuCapBTP_ChiTiet/);

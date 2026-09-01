@@ -427,11 +427,12 @@ function currentTime() {
   return new Intl.DateTimeFormat("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date());
 }
 
-function setQueryStatus(message, rfid = state.rfid) {
+function setQueryStatus(message, rfid = state.rfid, phase = "loading") {
   if (!rfid || state.trackedRfid !== rfid) return;
   const record = byId("search-record");
   record.textContent = `[${currentTime()}] - ${message} - QR/RFID : ${rfid}`;
-  record.classList.toggle("is-running", message.startsWith("Đang"));
+  record.classList.toggle("has-data", phase === "data" || phase === "complete");
+  record.classList.toggle("is-complete", phase === "complete");
   record.hidden = false;
 }
 
@@ -614,6 +615,7 @@ async function loadImages(rfid, searchId, dataDurationMs) {
       ? `Dữ liệu ${dataSeconds}s; ảnh ${loadedCount}/2 tải nền ${imageSeconds}s`
       : `Dữ liệu ${dataSeconds}s; không tìm thấy ảnh (${imageSeconds}s)`,
     rfid,
+    "complete",
   );
 }
 
@@ -635,18 +637,18 @@ async function search(rfid, trackStatus = false) {
     const data = await getJson(`${endpoint}?rfid=${encodeURIComponent(state.rfid)}`);
     if (searchId !== state.searchId) return;
     if (!data || Object.keys(data).length === 0) {
-      setQueryStatus("Không tìm thấy dữ liệu");
+      setQueryStatus("Không tìm thấy dữ liệu", state.rfid, "complete");
       setNotice("Không tìm thấy dữ liệu cho RFID này", "error");
       return;
     }
     showData(data);
     const dataDurationMs = performance.now() - dataStarted;
-    setQueryStatus(`Tải dữ liệu xong (${(dataDurationMs / 1000).toFixed(1)}s)`);
+    setQueryStatus(`Tải dữ liệu xong (${(dataDurationMs / 1000).toFixed(1)}s)`, state.rfid, "data");
     setNotice("Đã tải dữ liệu RFID", "success");
     loadImages(state.rfid, searchId, dataDurationMs);
   } catch (error) {
     if (searchId !== state.searchId) return;
-    if (error.status === 404 || /không tìm thấy/i.test(error.message)) setQueryStatus("Không tìm thấy dữ liệu");
+    if (error.status === 404 || /không tìm thấy/i.test(error.message)) setQueryStatus("Không tìm thấy dữ liệu", state.rfid, "complete");
     setNotice(error.message, "error");
   } finally {
     if (searchId === state.searchId) focusScannerInput();

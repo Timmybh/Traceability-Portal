@@ -17,15 +17,19 @@ test("a new lookup clears the previous result before requesting data", async () 
   assert.match(source, /renderSteps\(\[\]\)/);
 });
 
-test("running status uses the larger green heartbeat treatment", async () => {
+test("lookup status transitions from gray heartbeat to navy data heartbeat then complete", async () => {
   const [script, styles] = await Promise.all([
     read("iis/frontend/assets/app.js"),
     read("iis/frontend/assets/styles.css"),
   ]);
-  assert.match(script, /classList\.toggle\("is-running"/);
-  assert.match(styles, /\.search-record\s*\{[^}]*color:\s*#16845b[^}]*font-size:\s*14px/);
-  assert.match(styles, /@keyframes status-heartbeat/);
-  assert.match(styles, /\.search-record\.is-running\s*\{[^}]*status-heartbeat/);
+  assert.match(script, /classList\.toggle\("has-data", phase === "data" \|\| phase === "complete"\)/);
+  assert.match(script, /classList\.toggle\("is-complete", phase === "complete"\)/);
+  assert.match(styles, /\.search-record\s*\{[^}]*color:\s*#94a3b8[^}]*status-heartbeat/);
+  assert.match(styles, /\.search-record\.has-data\s*\{[^}]*color:\s*#0f1c38[^}]*status-heartbeat-data/);
+  assert.match(styles, /@keyframes status-heartbeat[^}]*scale\(1\)/);
+  assert.match(styles, /@keyframes status-heartbeat-data[^}]*scale\(1\)/);
+  assert.match(styles, /50%\s*\{[^}]*scale\(\.8\)/);
+  assert.match(styles, /\.search-record\.is-complete\s*\{[^}]*animation:\s*none/);
 });
 
 test("RM inspection splits details into material and accessory departments", async () => {

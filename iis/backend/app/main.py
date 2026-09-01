@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 import json
+from pathlib import Path
+import re
+from threading import Lock
+from time import monotonic
 from typing import Literal
 from urllib.parse import urlparse
 
 import httpx
 import pyodbc
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.responses import StreamingResponse
 
 from .config import get_settings
@@ -27,6 +31,9 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Web Truy suất API", version="1.0.0", lifespan=lifespan)
+
+_image_metadata_cache: dict[str, tuple[float, list[dict]]] = {}
+_image_metadata_cache_lock = Lock()
 
 
 def _validate_rfid(rfid: str) -> str:
@@ -72,12 +79,13 @@ def health() -> dict[str, str]:
         return {"status": "degraded", "database": "unavailable"}
 
 
-def _traceability_by_query(rfid: str, query: str | None):
+def _traceability_by_query(rfid: str, query: str | None, response: Response | None = None):
     value = _validate_rfid(rfid)
     if not query:
         raise HTTPException(status_code=503, detail="Câu truy vấn chưa được cấu hình")
     try:
-        rows = query_rows(get_settings(), query, {"RFID": value})
+        timings: dict[str, float] = {}
+        rows = query_rows(get_settings(), query, {"RFID": value}, timings)
     except (pyodbc.Error, ValueError) as exc:
         raise _database_error(exc) from exc
     if not rows:
@@ -91,17 +99,48 @@ def _traceability_by_query(rfid: str, query: str | None):
             result["Timeline"] = []
     else:
         result["Timeline"] = []
+    if response is not None and timings:
+        response.headers["Server-Timing"] = ", ".join(
+            f"{name};dur={duration:.1f}"
+            for name, duration in (
+                ("sql-connect", timings["connect_ms"]),
+                ("sql-execute", timings["query_ms"]),
+                ("sql-fetch", timings["fetch_ms"]),
+                ("database-total", timings["database_ms"]),
+            )
+        )
     return result
 
 
+def _new_traceability_query() -> str | None:
+    settings = get_settings()
+    if not settings.sqlquery_new_file:
+        return settings.sqlquery_new
+    query_path = Path(settings.sqlquery_new_file)
+    if not query_path.is_absolute():
+        query_path = Path(__file__).resolve().parents[1] / query_path
+    try:
+        query = query_path.read_text(encoding="utf-8-sig")
+    except OSError:
+        return settings.sqlquery_new
+    query = re.sub(
+        r"DECLARE\s+@rffid\s+nvarchar\(255\)\s*=\s*N'[^']*'\s*;",
+        "",
+        query,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+    return re.sub(r"@rffid\b", "@RFID", query, flags=re.IGNORECASE)
+
+
 @app.get("/api/traceability")
-def traceability(rfid: str = Query(..., min_length=1, max_length=100)):
-    return _traceability_by_query(rfid, get_settings().sqlquery)
+def traceability(response: Response, rfid: str = Query(..., min_length=1, max_length=100)):
+    return _traceability_by_query(rfid, get_settings().sqlquery, response)
 
 
 @app.get("/api/traceability/new")
-def traceability_new(rfid: str = Query(..., min_length=1, max_length=100)):
-    return _traceability_by_query(rfid, get_settings().sqlquery_new)
+def traceability_new(response: Response, rfid: str = Query(..., min_length=1, max_length=100)):
+    return _traceability_by_query(rfid, _new_traceability_query(), response)
 
 
 @app.get("/api/traceability/po")
@@ -155,6 +194,31 @@ def _image_url_for_side(rows: list[dict], side: Literal["front", "back"]) -> str
     raise HTTPException(status_code=404, detail="Không tìm thấy ảnh")
 
 
+def _image_rows(rfid: str) -> list[dict]:
+    settings = get_settings()
+    cache_key = rfid.casefold()
+    now = monotonic()
+    with _image_metadata_cache_lock:
+        cached = _image_metadata_cache.get(cache_key)
+        if cached and cached[0] > now:
+            return cached[1]
+        if cached:
+            _image_metadata_cache.pop(cache_key, None)
+
+    rows = query_rows(settings, settings.sqlquery_image, {"RFID": rfid})
+    expires_at = now + settings.image_metadata_cache_seconds
+    with _image_metadata_cache_lock:
+        # Giữ cache có giới hạn cho tiến trình IIS chạy lâu ngày.
+        if len(_image_metadata_cache) >= 1000:
+            expired_keys = [key for key, item in _image_metadata_cache.items() if item[0] <= now]
+            for key in expired_keys:
+                _image_metadata_cache.pop(key, None)
+            if len(_image_metadata_cache) >= 1000:
+                _image_metadata_cache.pop(next(iter(_image_metadata_cache)))
+        _image_metadata_cache[cache_key] = (expires_at, rows)
+    return rows
+
+
 def _validate_internal_url(url: str, allowed_host: str) -> None:
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or parsed.netloc.lower() != allowed_host.lower():
@@ -163,10 +227,9 @@ def _validate_internal_url(url: str, allowed_host: str) -> None:
 
 @app.get("/api/traceability/images")
 def image_metadata(rfid: str = Query(..., min_length=1, max_length=100)):
-    settings = get_settings()
     value = _validate_rfid(rfid)
     try:
-        rows = query_rows(settings, settings.sqlquery_image, {"RFID": value})
+        rows = _image_rows(value)
     except (pyodbc.Error, ValueError) as exc:
         raise _database_error(exc) from exc
     available = {"front": False, "back": False}
@@ -187,7 +250,7 @@ def product_image(
     client: httpx.Client | None = None
     upstream: httpx.Response | None = None
     try:
-        rows = query_rows(settings, settings.sqlquery_image, {"RFID": value})
+        rows = _image_rows(value)
         url = _image_url_for_side(rows, side)
         _validate_internal_url(url, settings.image_allowed_host)
         client = httpx.Client(timeout=settings.image_timeout_seconds, follow_redirects=False)

@@ -585,8 +585,8 @@ function preloadImage(url) {
   });
 }
 
-async function loadImages(rfid, searchId) {
-  setQueryStatus("Đang kiểm tra 2 ảnh ...", rfid);
+async function loadImages(rfid, searchId, dataDurationMs) {
+  const imageStarted = performance.now();
   let available;
   try {
     available = await getJson(`/api/traceability/images?rfid=${encodeURIComponent(rfid)}`);
@@ -605,7 +605,14 @@ async function loadImages(rfid, searchId) {
   renderImage();
   startImageRotation();
   const loadedCount = loaded.filter(Boolean).length;
-  setQueryStatus(loadedCount ? `Tải ${loadedCount}/2 ảnh xong` : "Không tìm thấy ảnh", rfid);
+  const imageSeconds = ((performance.now() - imageStarted) / 1000).toFixed(1);
+  const dataSeconds = (dataDurationMs / 1000).toFixed(1);
+  setQueryStatus(
+    loadedCount
+      ? `Dữ liệu ${dataSeconds}s; ảnh ${loadedCount}/2 tải nền ${imageSeconds}s`
+      : `Dữ liệu ${dataSeconds}s; không tìm thấy ảnh (${imageSeconds}s)`,
+    rfid,
+  );
 }
 
 async function search(rfid, trackStatus = false) {
@@ -620,6 +627,7 @@ async function search(rfid, trackStatus = false) {
   clearCurrentData();
   setQueryStatus("Đang tra cứu ...");
   setNotice("Đang tải thông tin…", "loading");
+  const dataStarted = performance.now();
   try {
     const endpoint = state.traceMode === "rfid-new" ? "/api/traceability/new" : "/api/traceability";
     const data = await getJson(`${endpoint}?rfid=${encodeURIComponent(state.rfid)}`);
@@ -630,9 +638,10 @@ async function search(rfid, trackStatus = false) {
       return;
     }
     showData(data);
-    setQueryStatus("Tải dữ liệu xong");
+    const dataDurationMs = performance.now() - dataStarted;
+    setQueryStatus(`Tải dữ liệu xong (${(dataDurationMs / 1000).toFixed(1)}s)`);
     setNotice("Đã tải dữ liệu RFID", "success");
-    loadImages(state.rfid, searchId);
+    loadImages(state.rfid, searchId, dataDurationMs);
   } catch (error) {
     if (searchId !== state.searchId) return;
     if (error.status === 404 || /không tìm thấy/i.test(error.message)) setQueryStatus("Không tìm thấy dữ liệu");

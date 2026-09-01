@@ -29,9 +29,11 @@ class Settings(BaseSettings):
     sqlquery_po: str
     sqlquery_lot: str
     sqlquery_new: str | None = None
+    sqlquery_new_file: str | None = None
     image_allowed_host: str = "10.8.0.72:9231"
     image_timeout_seconds: int = Field(default=15, ge=1, le=120)
     image_cache_seconds: int = Field(default=3600, ge=0, le=86400)
+    image_metadata_cache_seconds: int = Field(default=60, ge=1, le=3600)
 
 
 @lru_cache

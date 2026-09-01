@@ -1,5 +1,6 @@
 from collections.abc import Mapping, Sequence
 import re
+from time import perf_counter
 from typing import Any
 
 import pyodbc
@@ -62,12 +63,28 @@ def _parameterize(
 
 
 def query_rows(
-    settings: Settings, query: str, parameters: Mapping[str, str]
+    settings: Settings,
+    query: str,
+    parameters: Mapping[str, str],
+    timings: dict[str, float] | None = None,
 ) -> list[dict[str, Any]]:
     prepared, params = _parameterize(query, parameters)
+    connect_started = perf_counter()
     with pyodbc.connect(connection_string(settings)) as connection:
+        connected = perf_counter()
         cursor = connection.cursor()
         cursor.execute("SET TRANSACTION ISOLATION LEVEL READ COMMITTED")
+        query_started = perf_counter()
         cursor.execute(prepared, *params)
+        executed = perf_counter()
         columns = [column[0] for column in cursor.description or []]
-        return [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
+        rows = [dict(zip(columns, row, strict=True)) for row in cursor.fetchall()]
+        finished = perf_counter()
+        if timings is not None:
+            timings.update(
+                connect_ms=(connected - connect_started) * 1000,
+                query_ms=(executed - query_started) * 1000,
+                fetch_ms=(finished - executed) * 1000,
+                database_ms=(finished - connect_started) * 1000,
+            )
+        return rows

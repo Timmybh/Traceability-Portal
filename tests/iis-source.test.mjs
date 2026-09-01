@@ -69,8 +69,37 @@ test("new RFID endpoint executes SQLQUERY_NEW", async () => {
     read("iis/backend/app/config.py"),
   ]);
   assert.match(config, /sqlquery_new: str \| None = None/);
+  assert.match(config, /sqlquery_new_file: str \| None = None/);
   assert.match(api, /@app\.get\("\/api\/traceability\/new"\)/);
-  assert.match(api, /_traceability_by_query\(rfid, get_settings\(\)\.sqlquery_new\)/);
+  assert.match(api, /_traceability_by_query\(rfid, _new_traceability_query\(\)\)/);
+});
+
+test("new RFID query is seek-oriented and has a production index script", async () => {
+  const [query, indexes, deploy, env] = await Promise.all([
+    read("docs/TRACEABILITY-NEW-QUERY.sql"),
+    read("docs/TRACEABILITY-NEW-INDEXES.sql"),
+    read("iis/deploy/windows/deploy-iis.ps1"),
+    read("iis/backend/.env.example"),
+  ]);
+  assert.match(query, /WITH MappingCandidates AS/);
+  assert.match(query, /UNION ALL/);
+  assert.match(query, /OPTION \(RECOMPILE\)/);
+  assert.match(indexes, /IX_RFIDMapping_RFID/);
+  assert.match(indexes, /IX_BarcodeChiTiet_SoPhieu_PO/);
+  assert.match(deploy, /TRACEABILITY-NEW-QUERY\.sql/);
+  assert.match(env, /^SQLQUERY_NEW_FILE=sql\/TRACEABILITY-NEW-QUERY\.sql$/m);
+});
+
+test("RFID image metadata is queried once and reused by both image requests", async () => {
+  const [api, config] = await Promise.all([
+    read("iis/backend/app/main.py"),
+    read("iis/backend/app/config.py"),
+  ]);
+  assert.match(api, /def _image_rows\(rfid: str\)/);
+  assert.match(api, /_image_metadata_cache/);
+  assert.match(api, /rows = _image_rows\(value\)/);
+  assert.equal((api.match(/query_rows\(settings, settings\.sqlquery_image/g) || []).length, 1);
+  assert.match(config, /image_metadata_cache_seconds/);
 });
 
 test("timeline hides the content column and uses an icon-only document preview", async () => {

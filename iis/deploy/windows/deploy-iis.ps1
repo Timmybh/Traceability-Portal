@@ -24,6 +24,7 @@ $LogsTarget = Join-Path $InstallRoot "logs"
 $VenvPython = Join-Path $BackendTarget ".venv\Scripts\python.exe"
 $EnvFile = Join-Path $BackendTarget ".env"
 $EnvExampleFile = Join-Path $BackendTarget ".env.example"
+$SqlTarget = Join-Path $BackendTarget "sql"
 
 function Sync-EnvSetting {
     param(
@@ -73,6 +74,8 @@ Copy-Item -Path (Join-Path $FrontendSource "*") -Destination $WebRoot -Recurse -
 Get-ChildItem -Path $BackendSource -Force |
     Where-Object { $_.Name -notin @(".env", ".venv", "__pycache__") } |
     Copy-Item -Destination $BackendTarget -Recurse -Force
+New-Item -ItemType Directory -Force -Path $SqlTarget | Out-Null
+Copy-Item -Path (Join-Path $IisSource "..\docs\TRACEABILITY-NEW-QUERY.sql") -Destination $SqlTarget -Force
 
 if (-not (Test-Path $EnvFile)) {
     Copy-Item $EnvExampleFile $EnvFile
@@ -83,9 +86,11 @@ if (-not (Test-Path $EnvFile)) {
 # Query là một phần của phiên bản ứng dụng; thông tin đăng nhập trong .env được giữ nguyên.
 Sync-EnvSetting -Name "SQLQUERY" -SourcePath $EnvExampleFile -TargetPath $EnvFile
 Sync-EnvSetting -Name "SQLQUERY_NEW" -SourcePath $EnvExampleFile -TargetPath $EnvFile
+Sync-EnvSetting -Name "SQLQUERY_NEW_FILE" -SourcePath $EnvExampleFile -TargetPath $EnvFile
 Sync-EnvSetting -Name "SQLQUERY_IMAGE" -SourcePath $EnvExampleFile -TargetPath $EnvFile
 Sync-EnvSetting -Name "SQLQUERY_PO" -SourcePath $EnvExampleFile -TargetPath $EnvFile
 Sync-EnvSetting -Name "SQLQUERY_LOT" -SourcePath $EnvExampleFile -TargetPath $EnvFile
+Sync-EnvSetting -Name "IMAGE_METADATA_CACHE_SECONDS" -SourcePath $EnvExampleFile -TargetPath $EnvFile
 
 if ((Get-Content $EnvFile -Raw) -match "(?m)^SQLSERVER_(HOST|USER|PASSWORD)=\s*$") {
     throw "File .env chưa có đủ SQLSERVER_HOST, SQLSERVER_USER và SQLSERVER_PASSWORD."

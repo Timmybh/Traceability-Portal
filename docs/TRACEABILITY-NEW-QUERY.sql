@@ -1,8 +1,34 @@
-DECLARE @InputRFID nvarchar(255) = LTRIM(RTRIM(@RFID));
+-- SSMS: chỉ cần thay giá trị RFID tại dòng DECLARE bên dưới.
+DECLARE @rffid nvarchar(255) = N'NHAP_RFID_TAI_DAY';
+
+DECLARE @InputRFID nvarchar(255) = LTRIM(RTRIM(@rffid));
 DECLARE @NormalizedRFID nvarchar(255) =
     REPLACE(REPLACE(REPLACE(@InputRFID, N'(', N''), N')', N''), N' ', N'');
 
-WITH MappingRow AS (
+WITH MappingCandidates AS (
+    SELECT 0 AS MatchPriority, mp.*
+    FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp
+    WHERE mp.RFID = @InputRFID
+    UNION ALL
+    SELECT 1, mp.* FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp WHERE mp.RFID = @NormalizedRFID AND @NormalizedRFID <> @InputRFID
+    UNION ALL
+    SELECT 2, mp.* FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp WHERE mp.RFID_Hex = @InputRFID
+    UNION ALL
+    SELECT 3, mp.* FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp WHERE mp.RFID_Hex = @NormalizedRFID AND @NormalizedRFID <> @InputRFID
+    UNION ALL
+    SELECT 4, mp.* FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp WHERE mp.Code_RFID = @InputRFID
+    UNION ALL
+    SELECT 5, mp.* FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp WHERE mp.Code_RFID = @NormalizedRFID AND @NormalizedRFID <> @InputRFID
+    UNION ALL
+    SELECT 6, mp.* FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp WHERE mp.Code_RFID_Hex = @InputRFID
+    UNION ALL
+    SELECT 7, mp.* FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp WHERE mp.Code_RFID_Hex = @NormalizedRFID AND @NormalizedRFID <> @InputRFID
+    UNION ALL
+    SELECT 8, mp.* FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp WHERE mp.RFID_Barcode = @InputRFID
+    UNION ALL
+    SELECT 9, mp.* FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp WHERE mp.RFID_Barcode = @NormalizedRFID AND @NormalizedRFID <> @InputRFID
+),
+MappingRow AS (
     SELECT TOP (1)
         mp.RFID,
         mp.RFID_Hex,
@@ -11,31 +37,8 @@ WITH MappingRow AS (
         mp.productcode AS ProductCode,
         mp.ThoiGianMap,
         mp.NguoiMap
-    FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp
-    WHERE mp.RFID = @InputRFID
-       OR mp.RFID = @NormalizedRFID
-       OR mp.RFID_Hex = @InputRFID
-       OR mp.RFID_Hex = @NormalizedRFID
-       OR mp.Code_RFID = @InputRFID
-       OR mp.Code_RFID = @NormalizedRFID
-       OR mp.Code_RFID_Hex = @InputRFID
-       OR mp.Code_RFID_Hex = @NormalizedRFID
-       OR mp.RFID_Barcode = @InputRFID
-       OR mp.RFID_Barcode = @NormalizedRFID
-    ORDER BY
-        CASE
-            WHEN mp.RFID = @InputRFID THEN 0
-            WHEN mp.RFID = @NormalizedRFID THEN 1
-            WHEN mp.RFID_Hex = @InputRFID THEN 2
-            WHEN mp.RFID_Hex = @NormalizedRFID THEN 3
-            WHEN mp.Code_RFID = @InputRFID THEN 4
-            WHEN mp.Code_RFID = @NormalizedRFID THEN 5
-            WHEN mp.Code_RFID_Hex = @InputRFID THEN 6
-            WHEN mp.Code_RFID_Hex = @NormalizedRFID THEN 7
-            WHEN mp.RFID_Barcode = @InputRFID THEN 8
-            ELSE 9
-        END,
-        mp.ThoiGianMap DESC
+    FROM MappingCandidates AS mp
+    ORDER BY mp.MatchPriority, mp.ThoiGianMap DESC
 )
 SELECT
     mp.RFID,
@@ -102,4 +105,5 @@ OUTER APPLY (
       AND so.ProductCode = mp.ProductCode
       AND ISNULL(so.IsActive, 1) = 1
     ORDER BY so.Id DESC
-) AS customer;
+) AS customer
+OPTION (RECOMPILE);

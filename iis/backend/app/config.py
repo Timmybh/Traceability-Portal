@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     image_timeout_seconds: int = Field(default=15, ge=1, le=120)
     image_cache_seconds: int = Field(default=3600, ge=0, le=86400)
     image_metadata_cache_seconds: int = Field(default=60, ge=1, le=3600)
+    document_base_url: str = "http://10.8.0.72:9231/PhieuDieuTiet"
 
 
 @lru_cache

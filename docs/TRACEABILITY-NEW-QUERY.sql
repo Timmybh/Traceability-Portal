@@ -53,17 +53,19 @@ SELECT
     COALESCE(NULLIF(LTRIM(RTRIM(cap.TenXiNghiep)), N''), NULLIF(LTRIM(RTRIM(cap.TenPhanXuong)), N'')) AS XiNghiep,
     NULLIF(LTRIM(RTRIM(cap.TenCum)), N'') AS ChuyenMay,
     NULLIF(REPLACE(LTRIM(RTRIM(COALESCE(tc.LenhSanXuat, cap.LenhSanXuat))), N';', N''), N'') AS LenhSanXuat,
-    CAST(NULL AS nvarchar(50)) AS BanCat,
+    bm.BanCat,
     COALESCE(mainFabric.LotVaiChinh, NULLIF(LTRIM(RTRIM(tc.Lot)), N'')) AS LotVaiChinh,
     contrast.LotVaiPhoi,
     mp.ThoiGianMap AS NgaySanXuat,
     mp.ThoiGianMap,
     mp.BarcodeTachCay,
     mp.NguoiMap,
-    JSON_QUERY(N'[]') AS TimelineJson
+    COALESCE(productDevelopment.TimelineJson, JSON_QUERY(N'[]')) AS TimelineJson
 FROM MappingRow AS mp
 INNER JOIN dbo.CUTTING_TemBarcode_TachCay AS tc
     ON tc.Code = mp.BarcodeTachCay
+INNER JOIN dbo.Cutting_PhieuDieuTietGiacSoDo_ChiTiet_BanMay AS bm
+    ON bm.IdBanMay = tc.IdBanMay
 OUTER APPLY (
     SELECT TOP (1)
         p.SoPhieuCapBTP,
@@ -117,4 +119,62 @@ OUTER APPLY (
       AND ISNULL(so.IsActive, 1) = 1
     ORDER BY so.Id DESC
 ) AS customer
+OUTER APPLY (
+    SELECT JSON_QUERY((
+        SELECT
+            product.Id AS TimelineId,
+            1 AS StepNo,
+            N'Phát triển sản phẩm' AS StepTitle,
+            N'Product Development' AS StepTitleEnglish,
+            documentSummary.StepDate,
+            CONCAT(documentSummary.DocumentCount, N' tài liệu kỹ thuật') AS StepContent,
+            CAST(NULL AS nvarchar(max)) AS StepLink,
+            JSON_QUERY((
+                SELECT
+                    document.Id AS DetailId,
+                    ROW_NUMBER() OVER (
+                        ORDER BY
+                            COALESCE(document.NgayBanHanh, document.NgayTao),
+                            document.Id
+                    ) AS DetailNo,
+                    COALESCE(document.NgayBanHanh, document.NgayTao) AS DetailDate,
+                    COALESCE(
+                        NULLIF(LTRIM(RTRIM(document.TenTaiLieu)), N''),
+                        NULLIF(LTRIM(RTRIM(documentType.TenLoai)), N''),
+                        NULLIF(LTRIM(RTRIM(document.TenLoaiTaiLieu)), N''),
+                        document.MaLoaiTaiLieu
+                    ) AS DetailContent,
+                    CONCAT(N'/api/traceability/document?id=', document.Id) AS DetailLink,
+                    document.MaLoaiTaiLieu AS DocumentCode,
+                    document.IdMaster AS DocumentId,
+                    document.TrangThai AS DocumentStatus
+                FROM dbo.TEC_ThongTinTaiLieukyThuat AS document
+                OUTER APPLY (
+                    SELECT TOP (1) documentTypeRow.TenLoai
+                    FROM dbo.TEC_LoaiTaiLieuKyThuat AS documentTypeRow
+                    WHERE documentTypeRow.MaLoai = document.MaLoaiTaiLieu
+                    ORDER BY documentTypeRow.Id
+                ) AS documentType
+                WHERE document.IdMaster = product.Id
+                ORDER BY
+                    COALESCE(document.NgayBanHanh, document.NgayTao),
+                    document.Id
+                FOR JSON PATH
+            )) AS Details
+        FOR JSON PATH
+    )) AS TimelineJson
+    FROM dbo.TEC_ProductInformation AS product
+    CROSS APPLY (
+        SELECT
+            MAX(COALESCE(document.NgayBanHanh, document.NgayTao)) AS StepDate,
+            COUNT_BIG(*) AS DocumentCount
+        FROM dbo.TEC_ThongTinTaiLieukyThuat AS document
+        WHERE document.IdMaster = product.Id
+    ) AS documentSummary
+    WHERE REPLACE(LTRIM(RTRIM(product.ProductCode)), N';', N'') =
+          REPLACE(LTRIM(RTRIM(mp.ProductCode)), N';', N'')
+      AND REPLACE(LTRIM(RTRIM(product.SeasonCode)), N';', N'') =
+          REPLACE(LTRIM(RTRIM(COALESCE(tc.Mua, cap.SeasonCode))), N';', N'')
+      AND documentSummary.DocumentCount > 0
+) AS productDevelopment
 OPTION (RECOMPILE);

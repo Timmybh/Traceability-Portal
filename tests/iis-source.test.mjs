@@ -148,6 +148,23 @@ test("both RFID views use the document search preview icon", async () => {
   assert.doesNotMatch(script, /M2\.5 12s3\.5-6 9\.5-6/);
 });
 
+test("new technical-document previews are proxied as inline PDF or images", async () => {
+  const [query, api] = await Promise.all([
+    read("docs/TRACEABILITY-NEW-QUERY.sql"),
+    read("iis/backend/app/main.py"),
+  ]);
+  assert.match(query, /CONCAT\(N'\/api\/traceability\/document\?id=', document\.Id\) AS DetailLink/);
+  assert.match(api, /@app\.get\("\/api\/traceability\/document"\)/);
+  assert.match(api, /FROM dbo\.TEC_ThongTinTaiLieukyThuat/);
+  assert.match(api, /WHERE Id = @DocumentId/);
+  assert.match(api, /Content-Disposition": f"inline;/);
+  assert.match(api, /settings\.document_base_url/);
+  assert.match(api, /base_url\.rstrip\('\/'\)/);
+  assert.match(api, /part in \{"\.", "\.\."\} or ":" in part/);
+  assert.match(api, /"\.pdf", "\.jpg", "\.jpeg", "\.png"/);
+  assert.match(api, /_validate_internal_url\(url, allowed_host\)/);
+});
+
 test("Windows deploy preserves Vietnamese SQL literals as UTF-8", async () => {
   const source = await read("iis/deploy/windows/deploy-iis.ps1");
   assert.match(source, /Get-Content \$SourcePath -Encoding UTF8/);

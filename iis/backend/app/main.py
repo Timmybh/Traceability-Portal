@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 import json
+import mimetypes
 from pathlib import Path
 import re
 from threading import Lock
 from time import monotonic
 from typing import Literal
-from urllib.parse import urlparse
+from urllib.parse import quote, unquote, urlparse
 
 import httpx
 import pyodbc
@@ -222,7 +223,107 @@ def _image_rows(rfid: str) -> list[dict]:
 def _validate_internal_url(url: str, allowed_host: str) -> None:
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or parsed.netloc.lower() != allowed_host.lower():
-        raise HTTPException(status_code=502, detail="Địa chỉ ảnh không được phép")
+        raise HTTPException(status_code=502, detail="Địa chỉ tệp nội bộ không được phép")
+
+
+def _technical_document(document_id: int) -> dict:
+    rows = query_rows(
+        get_settings(),
+        """
+        SELECT TOP (1)
+            Id,
+            TenTaiLieu,
+            LoaiFile,
+            DuongDanURL,
+            DuongDanLocal
+        FROM dbo.TEC_ThongTinTaiLieukyThuat
+        WHERE Id = @DocumentId
+        """,
+        {"DocumentId": str(document_id)},
+    )
+    if not rows:
+        raise HTTPException(status_code=404, detail="Không tìm thấy tài liệu kỹ thuật")
+    return rows[0]
+
+
+def _technical_document_source(document: dict) -> str:
+    source = str(document.get("DuongDanURL") or document.get("DuongDanLocal") or "").strip()
+    if not source:
+        raise HTTPException(status_code=404, detail="Tài liệu chưa có đường dẫn")
+    return source
+
+
+def _technical_document_url(source: str, base_url: str, allowed_host: str) -> str:
+    if urlparse(source).scheme:
+        url = source
+    else:
+        normalized = source.replace("\\", "/")
+        parts = [part for part in normalized.split("/") if part]
+        if not parts or any(part in {".", ".."} or ":" in part for part in parts):
+            raise HTTPException(status_code=400, detail="Đường dẫn tài liệu không hợp lệ")
+        url = f"{base_url.rstrip('/')}/{'/'.join(quote(part) for part in parts)}"
+    _validate_internal_url(url, allowed_host)
+    return url
+
+
+def _technical_document_filename(document: dict, url: str) -> str:
+    path_name = Path(unquote(urlparse(url).path)).name
+    name = str(document.get("TenTaiLieu") or "").strip() or path_name
+    # Không cho ký tự điều khiển đi vào Content-Disposition.
+    return re.sub(r"[\r\n\x00-\x1f\x7f]", "", name) or f"document-{document['Id']}"
+
+
+@app.get("/api/traceability/document")
+def technical_document(document_id: int = Query(..., alias="id", ge=1)):
+    settings = get_settings()
+    client: httpx.Client | None = None
+    upstream: httpx.Response | None = None
+    try:
+        document = _technical_document(document_id)
+        source = _technical_document_source(document)
+        url = _technical_document_url(
+            source, settings.document_base_url, settings.image_allowed_host
+        )
+        extension = Path(unquote(urlparse(url).path)).suffix.lower()
+        allowed_extensions = {
+            ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff"
+        }
+        if extension not in allowed_extensions:
+            raise HTTPException(status_code=415, detail="Chỉ hỗ trợ preview PDF hoặc hình ảnh")
+        client = httpx.Client(timeout=settings.image_timeout_seconds, follow_redirects=False)
+        upstream = client.send(client.build_request("GET", url), stream=True)
+        upstream.raise_for_status()
+    except HTTPException:
+        raise
+    except (pyodbc.Error, ValueError) as exc:
+        raise _database_error(exc) from exc
+    except httpx.HTTPError as exc:
+        if upstream is not None:
+            upstream.close()
+        if client is not None:
+            client.close()
+        raise HTTPException(status_code=502, detail="Không tải được tài liệu nội bộ") from exc
+
+    assert client is not None and upstream is not None
+    filename = _technical_document_filename(document, url)
+    guessed_type = mimetypes.guess_type(filename)[0] or mimetypes.guess_type(url)[0]
+    content_type = upstream.headers.get("content-type", "").split(";", 1)[0].strip()
+    if not content_type or content_type == "application/octet-stream":
+        content_type = guessed_type or "application/pdf"
+    headers = {
+        "Cache-Control": f"private, max-age={settings.image_cache_seconds}",
+        "Content-Disposition": f"inline; filename*=UTF-8''{quote(filename)}",
+        "X-Content-Type-Options": "nosniff",
+    }
+
+    def stream_content():
+        try:
+            yield from upstream.iter_bytes()
+        finally:
+            upstream.close()
+            client.close()
+
+    return StreamingResponse(stream_content(), media_type=content_type, headers=headers)
 
 
 @app.get("/api/traceability/images")

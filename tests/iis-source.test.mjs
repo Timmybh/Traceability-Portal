@@ -159,6 +159,9 @@ test("new technical-document previews are proxied as inline PDF or images", asyn
   assert.match(api, /WHERE Id = @DocumentId/);
   assert.match(api, /Content-Disposition": f"inline;/);
   assert.match(api, /f"http:\/\/{settings\.hostfile}\/PhieuDieTiet"/);
+  assert.match(api, /if upstream\.status_code == 404 and not urlparse\(source\)\.scheme/);
+  assert.match(api, /f"http:\/\/{settings\.hostfile}\/PhieuDieuTiet"/);
+  assert.match(api, /source, fallback_base_url, settings\.hostfile/);
   assert.match(api, /settings\.hostfile/);
   assert.match(api, /base_url\.rstrip\('\/'\)/);
   assert.match(api, /part in \{"\.", "\.\."\} or ":" in part/);

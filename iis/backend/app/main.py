@@ -297,12 +297,36 @@ def technical_document(document_id: int = Query(..., alias="id", ge=1)):
             raise HTTPException(status_code=415, detail="Chỉ hỗ trợ preview PDF hoặc hình ảnh")
         client = httpx.Client(timeout=settings.image_timeout_seconds, follow_redirects=False)
         upstream = client.send(client.build_request("GET", url), stream=True)
+        if upstream.status_code == 404 and not urlparse(source).scheme:
+            for fallback_base_url in (
+                f"http://{settings.hostfile}/PhieuDieuTiet",
+                f"http://{settings.hostfile}",
+            ):
+                fallback_url = _technical_document_url(
+                    source, fallback_base_url, settings.hostfile
+                )
+                if fallback_url == url:
+                    continue
+                upstream.close()
+                url = fallback_url
+                upstream = client.send(client.build_request("GET", url), stream=True)
+                if upstream.status_code != 404:
+                    break
         upstream.raise_for_status()
     except HTTPException:
         raise
     except (pyodbc.Error, ValueError) as exc:
         raise _database_error(exc) from exc
     except httpx.HTTPError as exc:
+        logger.exception(
+            "Internal document download failed for document_id=%s url=%s status=%s database_url=%r database_local=%r",
+            document_id,
+            locals().get("url", "unresolved"),
+            upstream.status_code if upstream is not None else "unavailable",
+            locals().get("document", {}).get("DuongDanURL"),
+            locals().get("document", {}).get("DuongDanLocal"),
+            exc_info=exc,
+        )
         if upstream is not None:
             upstream.close()
         if client is not None:

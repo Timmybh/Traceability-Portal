@@ -11,7 +11,8 @@ test("SQL Server reads explicitly use READ COMMITTED", async () => {
 
 test("a new lookup clears the previous result before requesting data", async () => {
   const source = await read("iis/frontend/assets/app.js");
-  const searchBody = source.slice(source.indexOf("async function search("), source.indexOf('byId("search-form")'));
+  const searchStart = source.indexOf("async function search(");
+  const searchBody = source.slice(searchStart, source.indexOf('byId("search-form").addEventListener', searchStart));
   assert.ok(searchBody.indexOf("clearCurrentData();") < searchBody.indexOf("await getJson("));
   assert.match(source, /function clearCurrentData\(\)/);
   assert.match(source, /renderSteps\(\[\]\)/);
@@ -51,10 +52,11 @@ test("RM inspection splits details into material and accessory departments", asy
   assert.match(env, /d\.BoPhan AS Department/);
 });
 
-test("IIS frontend uses the Dong Tien logo, empty image state, and four trace tabs", async () => {
-  const [html, script] = await Promise.all([
+test("IIS frontend uses the Dong Tien logo, empty image state, and trace-mode selector", async () => {
+  const [html, script, styles] = await Promise.all([
     read("iis/frontend/index.html"),
     read("iis/frontend/assets/app.js"),
+    read("iis/frontend/assets/styles.css"),
   ]);
 
   assert.match(html, /dong-tien-logo\.png/);
@@ -62,12 +64,19 @@ test("IIS frontend uses the Dong Tien logo, empty image state, and four trace ta
   assert.match(html, /Truy suất RFID mới/);
   assert.match(html, /Truy suất PO/);
   assert.match(html, /Truy suất LOT/);
+  assert.match(html, /id="trace-mode-select"/);
+  assert.doesNotMatch(html, /class="trace-tabs"/);
   assert.match(html, /id="image-empty"/);
   assert.doesNotMatch(html, /jacket-line\.png/);
   assert.doesNotMatch(script, /FALLBACK_IMAGE|jacket-line\.png/);
   assert.match(script, /\/api\/traceability\/\$\{type\}/);
   assert.match(script, /state\.traceMode === "rfid-new"/);
   assert.match(script, /"\/api\/traceability\/new"/);
+  assert.doesNotMatch(script, /Tab này sử dụng SQLQUERY_NEW/);
+  assert.match(script, /trace-mode-select/);
+  assert.match(styles, /\.step-parent-row td \{ height: 66px/);
+  assert.match(styles, /\.step-detail-row td \{ height: 66px/);
+  assert.match(styles, /\.department-row td \{ height: 53px/);
 });
 
 test("new RFID endpoint executes SQLQUERY_NEW", async () => {

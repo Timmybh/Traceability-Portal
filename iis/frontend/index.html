@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Cổng tra cứu tiến trình sản xuất theo RFID">
   <title>Web Truy suất</title>
-  <link rel="stylesheet" href="/assets/styles.css?v=20260831-compact1">
+  <link rel="stylesheet" href="/assets/styles.css?v=20260901-trace-select1">
 </head>
 <body>
   <header class="topbar">
@@ -14,6 +14,15 @@
       <div class="portal"><strong>CỔNG TRUY XUẤT NGUỒN GỐC</strong><small>Product Traceability Portal</small></div>
     </div>
     <div id="rfid-search-area" class="search-area">
+      <label class="trace-mode-selector" for="trace-mode-select">
+        <span>Loại truy suất</span>
+        <select id="trace-mode-select" aria-label="Loại truy suất">
+          <option value="rfid">Truy suất RFID</option>
+          <option value="rfid-new">Truy suất RFID mới</option>
+          <option value="po">Truy suất PO</option>
+          <option value="lot">Truy suất LOT</option>
+        </select>
+      </label>
       <form id="search-form" class="search-form">
         <span class="search-icon" aria-hidden="true">⌕</span>
         <input id="rfid-input" name="rfid" autocomplete="off" placeholder="Nhập hoặc quét mã RFID ..." aria-label="Mã RFID">
@@ -22,13 +31,6 @@
       <p id="search-record" class="search-record" role="status" aria-live="polite" aria-label="Dòng tình trạng truy vấn" hidden></p>
     </div>
   </header>
-
-  <nav class="trace-tabs" aria-label="Loại truy suất">
-    <button class="trace-tab active" type="button" data-trace-tab="rfid" aria-selected="true">Truy suất RFID</button>
-    <button class="trace-tab" type="button" data-trace-tab="rfid-new" aria-selected="false">Truy suất RFID mới</button>
-    <button class="trace-tab" type="button" data-trace-tab="po" aria-selected="false">Truy suất PO</button>
-    <button class="trace-tab" type="button" data-trace-tab="lot" aria-selected="false">Truy suất LOT</button>
-  </nav>
 
   <section id="trace-panel-rfid" class="trace-panel">
     <div id="notice" class="notice" role="status" aria-live="polite"></div>
@@ -123,6 +125,6 @@
     </div>
   </section>
 
-  <script src="/assets/app.js?v=20260831-rfid-new1" defer></script>
+  <script src="/assets/app.js?v=20260901-trace-select1" defer></script>
 </body>
 </html>

@@ -120,19 +120,16 @@ function showLookupDemo(type) {
 }
 
 function activateTraceTab(name) {
-  document.querySelectorAll(".trace-tab").forEach((tab) => {
-    const active = tab.dataset.traceTab === name;
-    tab.classList.toggle("active", active);
-    tab.setAttribute("aria-selected", String(active));
-  });
+  byId("trace-mode-select").value = name;
   const isRfid = name === "rfid" || name === "rfid-new";
   document.querySelectorAll(".trace-panel").forEach((panel) => { panel.hidden = panel.id !== (isRfid ? "trace-panel-rfid" : `trace-panel-${name}`); });
-  byId("rfid-search-area").hidden = !isRfid;
+  byId("search-form").hidden = !isRfid;
+  if (!isRfid) byId("search-record").hidden = true;
   if (isRfid) {
     state.traceMode = name;
     state.searchId += 1;
     clearCurrentData();
-    setNotice(name === "rfid-new" ? "Tab này sử dụng SQLQUERY_NEW" : "Tab này sử dụng SQLQUERY", "");
+    setNotice("", "");
     focusScannerInput();
   }
   else if (!lookupState[name].length) showLookupDemo(name);
@@ -683,7 +680,7 @@ document.querySelectorAll(".view-switch button").forEach((tab) => tab.addEventLi
 }));
 byId("previous-image").addEventListener("click", () => transitionImage(state.side === "front" ? "back" : "front", -1));
 byId("next-image").addEventListener("click", () => transitionImage(state.side === "front" ? "back" : "front", 1));
-document.querySelectorAll(".trace-tab").forEach((tab) => tab.addEventListener("click", () => activateTraceTab(tab.dataset.traceTab)));
+byId("trace-mode-select").addEventListener("change", (event) => activateTraceTab(event.currentTarget.value));
 ["po", "lot"].forEach((type) => {
   byId(`${type}-search-form`).addEventListener("submit", (event) => {
     event.preventDefault();

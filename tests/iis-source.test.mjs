@@ -97,13 +97,34 @@ test("new RFID query is seek-oriented and has a production index script", async 
     read("iis/deploy/windows/deploy-iis.ps1"),
     read("iis/backend/.env.example"),
   ]);
-  assert.match(query, /WITH MappingCandidates AS/);
-  assert.match(query, /UNION ALL/);
+  assert.match(query, /WITH MappingRow AS/);
+  assert.doesNotMatch(query, /WITH MappingCandidates AS/);
+  assert.match(query, /mp\.RFID IN \(@InputRFID, @NormalizedRFID\)/);
   assert.match(query, /OPTION \(RECOMPILE\)/);
   assert.match(indexes, /IX_RFIDMapping_RFID/);
   assert.match(indexes, /IX_BarcodeChiTiet_SoPhieu_PO/);
   assert.match(deploy, /TRACEABILITY-NEW-QUERY\.sql/);
   assert.match(env, /^SQLQUERY_NEW_FILE=sql\/TRACEABILITY-NEW-QUERY\.sql$/m);
+});
+
+test("non-PDF timeline documents use named parameterized print queries", async () => {
+  const [query, api, invoice, receipt, inspection, outbound] = await Promise.all([
+    read("docs/TRACEABILITY-NEW-QUERY.sql"),
+    read("iis/backend/app/main.py"),
+    read("iis/backend/sql/print/invoice.sql"),
+    read("iis/backend/sql/print/rm-receipt.sql"),
+    read("iis/backend/sql/print/rm-inspection.sql"),
+    read("iis/backend/sql/print/rm-outbound.sql"),
+  ]);
+  assert.match(api, /_PRINT_QUERY_TYPES/);
+  assert.match(api, /@app\.get\("\/api\/traceability\/print\/\{document_type\}"/);
+  assert.match(api, /\{"DocumentId": value\}/);
+  assert.match(query, /\/api\/traceability\/print\/invoice\?id=/);
+  assert.match(query, /\/api\/traceability\/print\/wip-scanning\?id=/);
+  assert.match(query, /\/api\/traceability\/document\?id=/);
+  for (const detailQuery of [invoice, receipt, inspection, outbound]) {
+    assert.match(detailQuery, /@DocumentId/);
+  }
 });
 
 test("RFID image metadata is queried once and reused by both image requests", async () => {

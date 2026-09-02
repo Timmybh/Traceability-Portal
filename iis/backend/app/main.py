@@ -6,6 +6,7 @@ import logging
 import mimetypes
 from pathlib import Path
 import re
+from html import escape
 from threading import Lock
 from time import monotonic
 from typing import Literal
@@ -14,7 +15,7 @@ from urllib.parse import quote, unquote, urlparse
 import httpx
 import pyodbc
 from fastapi import FastAPI, HTTPException, Query, Response
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 
 from .config import get_settings
 from .database import connection_string, query_rows
@@ -39,6 +40,20 @@ app = FastAPI(title="Web Truy suất API", version="1.0.0", lifespan=lifespan)
 
 _image_metadata_cache: dict[str, tuple[float, list[dict]]] = {}
 _image_metadata_cache_lock = Lock()
+
+_PRINT_QUERY_TYPES = {
+    "invoice": ("02 - Số Invoice", "invoice.sql"),
+    "rm-receipt": ("03 - Phiếu nhập kho NPL", "rm-receipt.sql"),
+    "rm-inspection": ("04 - Phiếu kiểm NPL", "rm-inspection.sql"),
+    "rm-outbound": ("05 - Phiếu xuất kho NPL", "rm-outbound.sql"),
+    "fabric-relaxing": ("07 - Phiếu xả vải", "fabric-relaxing.sql"),
+    "fabric-cutting": ("09 - Phiếu cắt vải", "fabric-cutting.sql"),
+    "wip-inspection": ("10 - Phiếu kiểm BTP", "wip-inspection.sql"),
+    "wip-inbound": ("11 - Phiếu nhập kho BTP", "wip-inbound.sql"),
+    "wip-issuing": ("12 - Phiếu đặt BTP", "wip-issuing.sql"),
+    "wip-outbound": ("13 - Phiếu xuất BTP", "wip-outbound.sql"),
+    "wip-scanning": ("15 - Phiếu quét nhận BTP", "wip-scanning.sql"),
+}
 
 
 def _validate_rfid(rfid: str) -> str:
@@ -72,6 +87,45 @@ def _parse_nested_json(result: dict, source_key: str, target_key: str) -> dict:
 def _database_error(exc: Exception) -> HTTPException:
     logger.exception("SQL Server query failed", exc_info=exc)
     return HTTPException(status_code=503, detail="Không thể đọc dữ liệu SQL Server")
+
+
+def _print_query(document_type: str) -> tuple[str, str]:
+    definition = _PRINT_QUERY_TYPES.get(document_type)
+    if definition is None:
+        raise HTTPException(status_code=404, detail="Loại phiếu chưa được hỗ trợ")
+    title, filename = definition
+    path = Path(__file__).resolve().parents[1] / "sql" / "print" / filename
+    try:
+        return title, path.read_text(encoding="utf-8-sig")
+    except OSError as exc:
+        logger.exception("Print query file is unavailable: %s", path, exc_info=exc)
+        raise HTTPException(status_code=503, detail="Câu SQL chi tiết chưa sẵn sàng") from exc
+
+
+def _print_value(value: object) -> str:
+    if value is None:
+        return ""
+    text = str(value)
+    try:
+        parsed = json.loads(text)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return text
+    return json.dumps(parsed, ensure_ascii=False, indent=2)
+
+
+def _temporary_print_html(title: str, document_id: str, rows: list[dict]) -> str:
+    sections = []
+    for index, row in enumerate(rows, start=1):
+        cells = "".join(
+            f"<tr><th>{escape(str(name))}</th><td><pre>{escape(_print_value(value))}</pre></td></tr>"
+            for name, value in row.items()
+        )
+        sections.append(f"<section><h2>Bản ghi {index}</h2><table>{cells}</table></section>")
+    return f"""<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{escape(title)}</title><style>
+body{{font:14px Arial,sans-serif;color:#172239;margin:24px}} header{{display:flex;justify-content:space-between;align-items:end;border-bottom:2px solid #172239;margin-bottom:20px}} h1{{font-size:22px}} h2{{font-size:16px;margin-top:24px}} table{{border-collapse:collapse;width:100%}} th,td{{border:1px solid #cbd5e1;padding:7px;text-align:left;vertical-align:top}} th{{width:220px;background:#f1f5f9}} pre{{white-space:pre-wrap;word-break:break-word;margin:0;font:inherit}} button{{padding:8px 16px}} @media print{{button{{display:none}} body{{margin:0}}}}
+</style></head><body><header><div><h1>{escape(title)}</h1><p>Mã phiếu: {escape(document_id)}</p></div><button onclick="window.print()">In phiếu</button></header>{''.join(sections)}</body></html>"""
 
 
 @app.get("/health")
@@ -353,6 +407,22 @@ def technical_document(document_id: int = Query(..., alias="id", ge=1)):
             client.close()
 
     return StreamingResponse(stream_content(), media_type=content_type, headers=headers)
+
+
+@app.get("/api/traceability/print/{document_type}", response_class=HTMLResponse)
+def print_traceability_document(
+    document_type: str,
+    document_id: str = Query(..., alias="id", min_length=1, max_length=255),
+):
+    value = _validate_lookup(document_id, "Mã phiếu", 255)
+    title, query = _print_query(document_type)
+    try:
+        rows = query_rows(get_settings(), query, {"DocumentId": value})
+    except (pyodbc.Error, ValueError) as exc:
+        raise _database_error(exc) from exc
+    if not rows:
+        raise HTTPException(status_code=404, detail="Không tìm thấy dữ liệu chi tiết phiếu")
+    return HTMLResponse(_temporary_print_html(title, value, rows))
 
 
 @app.get("/api/traceability/images")

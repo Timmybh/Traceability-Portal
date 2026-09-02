@@ -387,19 +387,19 @@ function renderSteps(timeline = []) {
     const record = records.get(step[0]);
     const details = Array.isArray(record?.Details) ? record.Details : [];
     const latest = details.at(-1);
-    const summary = latest?.DetailContent || record?.StepContent || "Chưa có dữ liệu chi tiết cho công đoạn này.";
+    const summary = latest?.DetailContent || record?.StepContent || "";
     return `
     <article class="diagram-step" style="--step-color:${colors[index % colors.length]}">
       <span class="diagram-line" aria-hidden="true"></span>
       <span class="diagram-number">${step[0]}</span>
-      <button class="diagram-card" type="button" aria-expanded="false">
+      <button class="diagram-card" type="button" aria-expanded="false"${details.length ? "" : " disabled"}>
         <span class="diagram-heading"><span><b>${step[1]}</b><small>${step[2]}</small></span><span class="${record ? "completed" : "pending"}">${record ? "Đã có dữ liệu" : "Chờ dữ liệu"}</span></span>
-        <span class="diagram-detail">${escapeHtml(summary)}${details.length ? ` (${details.length} chi tiết)` : ""}</span>
+        ${summary ? `<span class="diagram-detail">${escapeHtml(summary)}${details.length ? ` (${details.length} chi tiết)` : ""}</span>` : ""}
       </button>
     </article>`;
   }).join("");
 
-  document.querySelectorAll(".diagram-card").forEach((card) => card.addEventListener("click", () => {
+  document.querySelectorAll(".diagram-card:not(:disabled)").forEach((card) => card.addEventListener("click", () => {
     const step = card.closest(".diagram-step");
     const open = step.classList.toggle("open");
     card.setAttribute("aria-expanded", String(open));

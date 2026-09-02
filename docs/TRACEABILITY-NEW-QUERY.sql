@@ -5,30 +5,7 @@ DECLARE @InputRFID nvarchar(255) = LTRIM(RTRIM(@rffid));
 DECLARE @NormalizedRFID nvarchar(255) =
     REPLACE(REPLACE(REPLACE(@InputRFID, N'(', N''), N')', N''), N' ', N'');
 
-WITH MappingCandidates AS (
-    SELECT 0 AS MatchPriority, mp.*
-    FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp
-    WHERE mp.RFID = @InputRFID
-    UNION ALL
-    SELECT 1, mp.* FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp WHERE mp.RFID = @NormalizedRFID AND @NormalizedRFID <> @InputRFID
-    UNION ALL
-    SELECT 2, mp.* FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp WHERE mp.RFID_Hex = @InputRFID
-    UNION ALL
-    SELECT 3, mp.* FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp WHERE mp.RFID_Hex = @NormalizedRFID AND @NormalizedRFID <> @InputRFID
-    UNION ALL
-    SELECT 4, mp.* FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp WHERE mp.Code_RFID = @InputRFID
-    UNION ALL
-    SELECT 5, mp.* FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp WHERE mp.Code_RFID = @NormalizedRFID AND @NormalizedRFID <> @InputRFID
-    UNION ALL
-    SELECT 6, mp.* FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp WHERE mp.Code_RFID_Hex = @InputRFID
-    UNION ALL
-    SELECT 7, mp.* FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp WHERE mp.Code_RFID_Hex = @NormalizedRFID AND @NormalizedRFID <> @InputRFID
-    UNION ALL
-    SELECT 8, mp.* FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp WHERE mp.RFID_Barcode = @InputRFID
-    UNION ALL
-    SELECT 9, mp.* FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp WHERE mp.RFID_Barcode = @NormalizedRFID AND @NormalizedRFID <> @InputRFID
-),
-MappingRow AS (
+WITH MappingRow AS (
     SELECT TOP (1)
         mp.RFID,
         mp.RFID_Hex,
@@ -37,8 +14,11 @@ MappingRow AS (
         mp.productcode AS ProductCode,
         mp.ThoiGianMap,
         mp.NguoiMap
-    FROM MappingCandidates AS mp
-    ORDER BY mp.MatchPriority, mp.ThoiGianMap DESC
+    FROM dbo.CUTTING_TemBarcode_TachCay_RFID_Mapping AS mp
+    WHERE mp.RFID IN (@InputRFID, @NormalizedRFID)
+       OR mp.Code_RFID IN (@InputRFID, @NormalizedRFID)
+       OR mp.RFID_Hex IN (@InputRFID, @NormalizedRFID)
+    ORDER BY mp.ThoiGianMap DESC
 )
 SELECT
     mp.RFID,
@@ -98,7 +78,7 @@ OUTER APPLY (
                 1 AS DetailNo,
                 cap.NgayDuyet AS DetailDate,
                 CONCAT(N'Mã phiếu: ', cap.SoPhieuCapBTP) AS DetailContent,
-                CAST(NULL AS nvarchar(max)) AS DetailLink
+                CONCAT(N'/api/traceability/print/wip-issuing?id=', cap.SoPhieuCapBTP) AS DetailLink
             FOR JSON PATH
         )) AS DetailsJson
     WHERE NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), cap.SoPhieuCapBTP))), N'') IS NOT NULL
@@ -113,9 +93,18 @@ OUTER APPLY (
                 1 AS DetailNo,
                 cap.NgayNhanBTP AS DetailDate,
                 CONCAT(N'Mã phiếu: ', cap.SoPhieuCapBTP) AS DetailContent,
-                CAST(NULL AS nvarchar(max)) AS DetailLink
+                CONCAT(N'/api/traceability/print/wip-outbound?id=', cap.SoPhieuCapBTP) AS DetailLink
             FOR JSON PATH
-        )) AS DetailsJson
+        )) AS DetailsJson,
+        JSON_QUERY((
+            SELECT
+                1 AS DetailId,
+                1 AS DetailNo,
+                cap.NgayNhanBTP AS DetailDate,
+                CONCAT(N'Mã phiếu: ', cap.SoPhieuCapBTP) AS DetailContent,
+                CONCAT(N'/api/traceability/print/wip-scanning?id=', cap.SoPhieuCapBTP) AS DetailLink
+            FOR JSON PATH
+        )) AS ScanningDetailsJson
     WHERE NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), cap.SoPhieuCapBTP))), N'') IS NOT NULL
       AND cap.NgayNhanBTP IS NOT NULL
 ) AS wipOutbound
@@ -156,7 +145,6 @@ OUTER APPLY (
     SELECT TOP (1)
         product.Id AS TimelineId,
         documentSummary.StepDate,
-        documentSummary.DocumentCount,
         JSON_QUERY((
             SELECT
                 document.Id AS DetailId,
@@ -194,8 +182,7 @@ OUTER APPLY (
     FROM dbo.TEC_ProductInformation AS product
     CROSS APPLY (
         SELECT
-            MAX(COALESCE(document.NgayBanHanh, document.NgayTao)) AS StepDate,
-            COUNT_BIG(*) AS DocumentCount
+            MAX(COALESCE(document.NgayBanHanh, document.NgayTao)) AS StepDate
         FROM dbo.TEC_ThongTinTaiLieukyThuat AS document
         WHERE TRY_CONVERT(bigint, document.IdMaster) = product.Id
           AND LTRIM(RTRIM(document.TrangThai)) = N'Đã ban hành'
@@ -204,24 +191,27 @@ OUTER APPLY (
           REPLACE(LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode))), N';', N'')
       AND REPLACE(LTRIM(RTRIM(CONVERT(nvarchar(255), product.SeasonCode))), N';', N'') =
           REPLACE(LTRIM(RTRIM(CONVERT(nvarchar(255), COALESCE(tc.Mua, cap.SeasonCode)))), N';', N'')
-      AND documentSummary.DocumentCount > 0
+      AND EXISTS (
+          SELECT 1
+          FROM dbo.TEC_ThongTinTaiLieukyThuat AS publishedDocument
+          WHERE TRY_CONVERT(bigint, publishedDocument.IdMaster) = product.Id
+            AND LTRIM(RTRIM(publishedDocument.TrangThai)) = N'Đã ban hành'
+      )
     ORDER BY product.Id DESC
 ) AS productDevelopment
 OUTER APPLY (
     SELECT
-        COUNT_BIG(*) AS InvoiceCount,
         JSON_QUERY((
             SELECT
                 ROW_NUMBER() OVER (ORDER BY invoice.AtchDocNo) AS DetailId,
                 ROW_NUMBER() OVER (ORDER BY invoice.AtchDocNo) AS DetailNo,
                 CAST(NULL AS datetime2) AS DetailDate,
                 CONCAT(N'Số Invoice: ', invoice.AtchDocNo) AS DetailContent,
-                CAST(NULL AS nvarchar(max)) AS DetailLink
+                CONCAT(N'/api/traceability/print/invoice?id=', invoice.AtchDocNo) AS DetailLink
             FROM (
                 SELECT DISTINCT LTRIM(RTRIM(CONVERT(nvarchar(255), detail.AtchDocNo))) AS AtchDocNo
                 FROM dbo.Bravo_PNK_Detail AS detail
-                WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), detail.SalesContractsNo))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.PO)))
-                  AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.CustomerCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), customer.CustomerCode)))
+                WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), detail.CustomerCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), customer.CustomerCode)))
                   AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.SizeCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), tc.TenSize)))
                   AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode)))
                   AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductionOrderNo))) = LTRIM(RTRIM(CONVERT(nvarchar(255), COALESCE(tc.LenhSanXuat, cap.LenhSanXuat))))
@@ -230,30 +220,20 @@ OUTER APPLY (
             ORDER BY invoice.AtchDocNo
             FOR JSON PATH
         )) AS DetailsJson
-    FROM (
-        SELECT DISTINCT LTRIM(RTRIM(CONVERT(nvarchar(255), detail.AtchDocNo))) AS AtchDocNo
-        FROM dbo.Bravo_PNK_Detail AS detail
-        WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), detail.SalesContractsNo))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.PO)))
-          AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.CustomerCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), customer.CustomerCode)))
-          AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.SizeCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), tc.TenSize)))
-          AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode)))
-          AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductionOrderNo))) = LTRIM(RTRIM(CONVERT(nvarchar(255), COALESCE(tc.LenhSanXuat, cap.LenhSanXuat))))
-          AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), detail.AtchDocNo))), N'') IS NOT NULL
-    ) AS invoiceCount
 ) AS invoiceNumbers
 OUTER APPLY (
     SELECT
-        COUNT_BIG(*) AS ReceiptCount,
         JSON_QUERY((
             SELECT
-                ROW_NUMBER() OVER (ORDER BY receipt.DocNo) AS DetailId,
+                receipt.ReceiptNotesId AS DetailId,
                 ROW_NUMBER() OVER (ORDER BY receipt.DocNo) AS DetailNo,
                 CAST(NULL AS datetime2) AS DetailDate,
                 CONCAT(N'Mã phiếu: ', receipt.DocNo) AS DetailContent,
-                CAST(NULL AS nvarchar(max)) AS DetailLink,
+                CONCAT(N'/api/traceability/print/rm-receipt?id=', receipt.ReceiptNotesId) AS DetailLink,
                 receipt.Department
             FROM (
                 SELECT DISTINCT
+                    master.ReceiptNotesId,
                     LTRIM(RTRIM(CONVERT(nvarchar(255), master.DocNo))) AS DocNo,
                     CASE master.DocCode
                         WHEN N'NK' THEN N'Nguyên liệu'
@@ -262,8 +242,7 @@ OUTER APPLY (
                 FROM dbo.Bravo_PNK_Detail AS detail
                 INNER JOIN dbo.Bravo_PNK_Master AS master
                     ON detail.PNKMasterId = master.ReceiptNotesId
-                WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), detail.SalesContractsNo))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.PO)))
-                  AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.CustomerCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), customer.CustomerCode)))
+                WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), detail.CustomerCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), customer.CustomerCode)))
                   AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.SizeCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), tc.TenSize)))
                   AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode)))
                   AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductionOrderNo))) = LTRIM(RTRIM(CONVERT(nvarchar(255), COALESCE(tc.LenhSanXuat, cap.LenhSanXuat))))
@@ -274,27 +253,10 @@ OUTER APPLY (
             ORDER BY receipt.Department, receipt.DocNo
             FOR JSON PATH
         )) AS DetailsJson
-    FROM (
-        SELECT DISTINCT
-            LTRIM(RTRIM(CONVERT(nvarchar(255), master.DocNo))) AS DocNo,
-            master.DocCode
-        FROM dbo.Bravo_PNK_Detail AS detail
-        INNER JOIN dbo.Bravo_PNK_Master AS master
-            ON detail.PNKMasterId = master.ReceiptNotesId
-        WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), detail.SalesContractsNo))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.PO)))
-          AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.CustomerCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), customer.CustomerCode)))
-          AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.SizeCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), tc.TenSize)))
-          AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode)))
-          AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductionOrderNo))) = LTRIM(RTRIM(CONVERT(nvarchar(255), COALESCE(tc.LenhSanXuat, cap.LenhSanXuat))))
-          AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), master.DocNo))), N'') IS NOT NULL
-          AND master.DocCode IN (N'NK', N'NM')
-          AND master.DocStatus = 4
-    ) AS receiptCount
 ) AS receiptNotes
 OUTER APPLY (
     SELECT
-        COUNT_BIG(*) AS InspectionCount,
-        MAX(inspectionCount.NgayGiamDinh) AS StepDate,
+        MAX(inspectionRows.NgayGiamDinh) AS StepDate,
         JSON_QUERY((
             SELECT
                 ROW_NUMBER() OVER (
@@ -305,7 +267,7 @@ OUTER APPLY (
                 ) AS DetailNo,
                 inspection.NgayGiamDinh AS DetailDate,
                 CONCAT(N'Mã phiếu: ', inspection.MaPhieu) AS DetailContent,
-                CAST(NULL AS nvarchar(max)) AS DetailLink,
+                CONCAT(N'/api/traceability/print/rm-inspection?id=', inspection.MaPhieu) AS DetailLink,
                 inspection.Department
             FROM (
                 SELECT DISTINCT
@@ -320,8 +282,7 @@ OUTER APPLY (
                     ON detail.PNKMasterId = master.ReceiptNotesId
                 INNER JOIN dbo.WH_PhieuGiamDinh AS inspectionRow
                     ON inspectionRow.ReceiptNotesId = master.ReceiptNotesId
-                WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), detail.SalesContractsNo))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.PO)))
-                  AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.CustomerCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), customer.CustomerCode)))
+                WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), detail.CustomerCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), customer.CustomerCode)))
                   AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.SizeCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), tc.TenSize)))
                   AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode)))
                   AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductionOrderNo))) = LTRIM(RTRIM(CONVERT(nvarchar(255), COALESCE(tc.LenhSanXuat, cap.LenhSanXuat))))
@@ -344,8 +305,7 @@ OUTER APPLY (
             ON detail.PNKMasterId = master.ReceiptNotesId
         INNER JOIN dbo.WH_PhieuGiamDinh AS inspectionRow
             ON inspectionRow.ReceiptNotesId = master.ReceiptNotesId
-        WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), detail.SalesContractsNo))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.PO)))
-          AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.CustomerCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), customer.CustomerCode)))
+        WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), detail.CustomerCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), customer.CustomerCode)))
           AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.SizeCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), tc.TenSize)))
           AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode)))
           AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductionOrderNo))) = LTRIM(RTRIM(CONVERT(nvarchar(255), COALESCE(tc.LenhSanXuat, cap.LenhSanXuat))))
@@ -354,13 +314,12 @@ OUTER APPLY (
           AND LOWER(LTRIM(RTRIM(CONVERT(nvarchar(20), inspectionRow.LoaiGiamDinh)))) IN (N'nl', N'pl')
           AND ISNULL(UPPER(LTRIM(RTRIM(CONVERT(nvarchar(50), inspectionRow.TrangThai)))), N'') <> N'HUY'
           AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), inspectionRow.MaPhieu))), N'') IS NOT NULL
-    ) AS inspectionCount
+    ) AS inspectionRows
 ) AS materialInspections
 OUTER APPLY (
     SELECT
-        COUNT_BIG(*) AS OutboundCount,
-        MAX(outboundCount.ThoiGianXacNhanXuat) AS StepDate,
-        MIN(outboundCount.ThoiGianXacNhanXuat) AS FirstOutboundDate,
+        MAX(outboundRows.ThoiGianXacNhanXuat) AS StepDate,
+        MIN(outboundRows.ThoiGianXacNhanXuat) AS FirstOutboundDate,
         JSON_QUERY((
             SELECT
                 ROW_NUMBER() OVER (
@@ -371,7 +330,7 @@ OUTER APPLY (
                 ) AS DetailNo,
                 outbound.ThoiGianXacNhanXuat AS DetailDate,
                 CONCAT(N'Mã phiếu: ', outbound.MaSoPhieuSoan) AS DetailContent,
-                CAST(NULL AS nvarchar(max)) AS DetailLink,
+                CONCAT(N'/api/traceability/print/rm-outbound?id=', outbound.MaSoPhieuSoan) AS DetailLink,
                 outbound.Department
             FROM (
                 SELECT DISTINCT
@@ -386,8 +345,7 @@ OUTER APPLY (
                     ON detail.PNKMasterId = master.ReceiptNotesId
                 INNER JOIN dbo.WH_PhieuSoanHang AS outboundRow
                     ON outboundRow.ReceiptNotesId = master.ReceiptNotesId
-                WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), detail.SalesContractsNo))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.PO)))
-                  AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.CustomerCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), customer.CustomerCode)))
+                WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), detail.CustomerCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), customer.CustomerCode)))
                   AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.SizeCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), tc.TenSize)))
                   AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode)))
                   AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductionOrderNo))) = LTRIM(RTRIM(CONVERT(nvarchar(255), COALESCE(tc.LenhSanXuat, cap.LenhSanXuat))))
@@ -408,8 +366,7 @@ OUTER APPLY (
             ON detail.PNKMasterId = master.ReceiptNotesId
         INNER JOIN dbo.WH_PhieuSoanHang AS outboundRow
             ON outboundRow.ReceiptNotesId = master.ReceiptNotesId
-        WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), detail.SalesContractsNo))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.PO)))
-          AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.CustomerCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), customer.CustomerCode)))
+        WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), detail.CustomerCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), customer.CustomerCode)))
           AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.SizeCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), tc.TenSize)))
           AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode)))
           AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductionOrderNo))) = LTRIM(RTRIM(CONVERT(nvarchar(255), COALESCE(tc.LenhSanXuat, cap.LenhSanXuat))))
@@ -417,19 +374,18 @@ OUTER APPLY (
           AND master.DocStatus = 4
           AND UPPER(LTRIM(RTRIM(CONVERT(nvarchar(255), outboundRow.MaSoPhieuSoan)))) LIKE N'[NP]A%'
           AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), outboundRow.MaSoPhieuSoan))), N'') IS NOT NULL
-    ) AS outboundCount
+    ) AS outboundRows
 ) AS materialOutbound
 OUTER APPLY (
     SELECT
-        COUNT_BIG(*) AS RelaxingCount,
-        MAX(relaxingCount.ThoiGianTaoPhieu) AS StepDate,
+        MAX(relaxingRows.ThoiGianTaoPhieu) AS StepDate,
         JSON_QUERY((
             SELECT
                 ROW_NUMBER() OVER (ORDER BY relaxing.ThoiGianTaoPhieu, relaxing.IdPhieuXaVai) AS DetailId,
                 ROW_NUMBER() OVER (ORDER BY relaxing.ThoiGianTaoPhieu, relaxing.IdPhieuXaVai) AS DetailNo,
                 relaxing.ThoiGianTaoPhieu AS DetailDate,
                 CONCAT(N'Mã phiếu: ', relaxing.IdPhieuXaVai) AS DetailContent,
-                CAST(NULL AS nvarchar(max)) AS DetailLink
+                CONCAT(N'/api/traceability/print/fabric-relaxing?id=', relaxing.IdPhieuXaVai) AS DetailLink
             FROM (
                 SELECT DISTINCT
                     LTRIM(RTRIM(CONVERT(nvarchar(255), relaxingRow.IdPhieuXaVai))) AS IdPhieuXaVai,
@@ -450,19 +406,18 @@ OUTER APPLY (
         WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), relaxingRow.MaCay))) =
               LTRIM(RTRIM(CONVERT(nvarchar(255), tc.MaCay)))
           AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), relaxingRow.IdPhieuXaVai))), N'') IS NOT NULL
-    ) AS relaxingCount
+    ) AS relaxingRows
 ) AS fabricRelaxing
 OUTER APPLY (
     SELECT
-        COUNT_BIG(*) AS CuttingCount,
-        MAX(cuttingCount.NgayThang) AS StepDate,
+        MAX(cuttingRows.NgayThang) AS StepDate,
         JSON_QUERY((
             SELECT
                 ROW_NUMBER() OVER (ORDER BY cutting.NgayThang, cutting.PhieuHoachToanId) AS DetailId,
                 ROW_NUMBER() OVER (ORDER BY cutting.NgayThang, cutting.PhieuHoachToanId) AS DetailNo,
                 cutting.NgayThang AS DetailDate,
                 CONCAT(N'Mã phiếu: ', cutting.PhieuHoachToanId) AS DetailContent,
-                CAST(NULL AS nvarchar(max)) AS DetailLink
+                CONCAT(N'/api/traceability/print/fabric-cutting?id=', cutting.PhieuHoachToanId) AS DetailLink
             FROM (
                 SELECT DISTINCT
                     LTRIM(RTRIM(CONVERT(nvarchar(255), master.PhieuHoachToanId))) AS PhieuHoachToanId,
@@ -487,19 +442,18 @@ OUTER APPLY (
         WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), tree.MaCay))) =
               LTRIM(RTRIM(CONVERT(nvarchar(255), tc.MaCay)))
           AND master.NgayThang IS NOT NULL
-    ) AS cuttingCount
+    ) AS cuttingRows
 ) AS fabricCutting
 OUTER APPLY (
     SELECT
-        COUNT_BIG(*) AS WipInspectionCount,
-        MAX(wipInspectionCount.NgayTao) AS StepDate,
+        MAX(wipInspectionRows.NgayTao) AS StepDate,
         JSON_QUERY((
             SELECT
                 ROW_NUMBER() OVER (ORDER BY wipInspection.NgayTao, wipInspection.IdPhieuKiemTra) AS DetailId,
                 ROW_NUMBER() OVER (ORDER BY wipInspection.NgayTao, wipInspection.IdPhieuKiemTra) AS DetailNo,
                 wipInspection.NgayTao AS DetailDate,
                 CONCAT(N'Mã phiếu: ', wipInspection.IdPhieuKiemTra) AS DetailContent,
-                CAST(NULL AS nvarchar(max)) AS DetailLink
+                CONCAT(N'/api/traceability/print/wip-inspection?id=', wipInspection.IdPhieuKiemTra) AS DetailLink
             FROM (
                 SELECT DISTINCT
                     LTRIM(RTRIM(CONVERT(nvarchar(255), inspectionRow.IdPhieuKiemTra))) AS IdPhieuKiemTra,
@@ -528,7 +482,7 @@ OUTER APPLY (
         WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), tree.MaCay))) =
               LTRIM(RTRIM(CONVERT(nvarchar(255), tc.MaCay)))
           AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), inspectionRow.IdPhieuKiemTra))), N'') IS NOT NULL
-    ) AS wipInspectionCount
+    ) AS wipInspectionRows
 ) AS wipInspections
 OUTER APPLY (
     SELECT TOP (1)
@@ -540,7 +494,7 @@ OUTER APPLY (
                 1 AS DetailNo,
                 barcodeRow.NgayTao AS DetailDate,
                 CONCAT(N'Mã phiếu: ', barcodeRow.PhieuHoachToanId) AS DetailContent,
-                CAST(NULL AS nvarchar(max)) AS DetailLink
+                CONCAT(N'/api/traceability/print/wip-inbound?id=', barcodeRow.PhieuHoachToanId) AS DetailLink
             FOR JSON PATH
         )) AS DetailsJson
     FROM dbo.CUTTING_PhieuHoachToan AS master
@@ -571,29 +525,29 @@ OUTER APPLY (
                 N'Phát triển sản phẩm' AS StepTitle,
                 N'Product Development' AS StepTitleEnglish,
                 productDevelopment.StepDate,
-                CONCAT(productDevelopment.DocumentCount, N' tài liệu kỹ thuật') AS StepContent,
+                N'Danh sách tài liệu kỹ thuật' AS StepContent,
                 productDevelopment.DetailsJson
-            WHERE productDevelopment.DocumentCount > 0
+            WHERE productDevelopment.DetailsJson <> N'[]'
             UNION ALL
             SELECT
                 CAST(2 AS bigint), 2, N'Số invoice', N'Invoice Number', CAST(NULL AS datetime2),
-                CONCAT(invoiceNumbers.InvoiceCount, N' số Invoice'), invoiceNumbers.DetailsJson
-            WHERE invoiceNumbers.InvoiceCount > 0
+                N'Danh sách Invoice', invoiceNumbers.DetailsJson
+            WHERE invoiceNumbers.DetailsJson <> N'[]'
             UNION ALL
             SELECT
                 CAST(3 AS bigint), 3, N'Nhập kho NPL', N'RM Inbound', CAST(NULL AS datetime2),
-                CONCAT(receiptNotes.ReceiptCount, N' phiếu nhập kho'), receiptNotes.DetailsJson
-            WHERE receiptNotes.ReceiptCount > 0
+                N'Danh sách phiếu nhập kho', receiptNotes.DetailsJson
+            WHERE receiptNotes.DetailsJson <> N'[]'
             UNION ALL
             SELECT
                 CAST(4 AS bigint), 4, N'Kiểm NPL', N'RM Inspection', materialInspections.StepDate,
-                CONCAT(materialInspections.InspectionCount, N' phiếu giám định'), materialInspections.DetailsJson
-            WHERE materialInspections.InspectionCount > 0
+                N'Danh sách phiếu giám định', materialInspections.DetailsJson
+            WHERE materialInspections.DetailsJson <> N'[]'
             UNION ALL
             SELECT
                 CAST(5 AS bigint), 5, N'Xuất kho NPL', N'RM Outbound', materialOutbound.StepDate,
-                CONCAT(materialOutbound.OutboundCount, N' phiếu xuất kho'), materialOutbound.DetailsJson
-            WHERE materialOutbound.OutboundCount > 0
+                N'Danh sách phiếu xuất kho', materialOutbound.DetailsJson
+            WHERE materialOutbound.DetailsJson <> N'[]'
             UNION ALL
             SELECT
                 CAST(6 AS bigint), 6, N'Nhận NPL từ kho', N'Receive Materials', materialOutbound.FirstOutboundDate,
@@ -602,8 +556,8 @@ OUTER APPLY (
             UNION ALL
             SELECT
                 CAST(7 AS bigint), 7, N'Xả vải', N'Fabric Relaxing', fabricRelaxing.StepDate,
-                CONCAT(fabricRelaxing.RelaxingCount, N' phiếu xả vải'), fabricRelaxing.DetailsJson
-            WHERE fabricRelaxing.RelaxingCount > 0
+                N'Danh sách phiếu xả vải', fabricRelaxing.DetailsJson
+            WHERE fabricRelaxing.DetailsJson <> N'[]'
             UNION ALL
             SELECT
                 CAST(8 AS bigint), 8, N'Trải vải', N'Fabric Spreading', fabricCutting.StepDate,
@@ -612,13 +566,13 @@ OUTER APPLY (
             UNION ALL
             SELECT
                 CAST(9 AS bigint), 9, N'Cắt vải', N'Fabric Cutting', fabricCutting.StepDate,
-                CONCAT(fabricCutting.CuttingCount, N' phiếu hoạch toán'), fabricCutting.DetailsJson
-            WHERE fabricCutting.CuttingCount > 0
+                N'Danh sách phiếu hoạch toán', fabricCutting.DetailsJson
+            WHERE fabricCutting.DetailsJson <> N'[]'
             UNION ALL
             SELECT
                 CAST(10 AS bigint), 10, N'Kiểm BTP', N'WIP Inspection', wipInspections.StepDate,
-                CONCAT(wipInspections.WipInspectionCount, N' phiếu kiểm BTP'), wipInspections.DetailsJson
-            WHERE wipInspections.WipInspectionCount > 0
+                N'Danh sách phiếu kiểm BTP', wipInspections.DetailsJson
+            WHERE wipInspections.DetailsJson <> N'[]'
             UNION ALL
             SELECT
                 CAST(11 AS bigint), 11, N'Nhập kho BTP', N'WIP Inbound', wipInbound.StepDate,
@@ -637,7 +591,7 @@ OUTER APPLY (
             UNION ALL
             SELECT
                 CAST(15 AS bigint), 15, N'Quét nhận BTP', N'WIP Scanning', wipOutbound.StepDate,
-                CONCAT(N'Phiếu cấp BTP: ', cap.SoPhieuCapBTP), wipOutbound.DetailsJson
+                CONCAT(N'Phiếu cấp BTP: ', cap.SoPhieuCapBTP), wipOutbound.ScanningDetailsJson
             WHERE wipOutbound.StepDate IS NOT NULL
         ) AS timeline
         ORDER BY timeline.StepNo

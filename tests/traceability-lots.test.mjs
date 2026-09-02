@@ -64,7 +64,7 @@ test("SQLQUERY uses tracking tables and SQLQUERY_NEW uses the cutting mapping ch
   assert.match(sqlQueryNew, /N'Phát triển sản phẩm' AS StepTitle/);
   assert.match(sqlQueryNew, /Bravo_PNK_Detail AS detail/);
   assert.match(sqlQueryNew, /detail\.AtchDocNo/);
-  assert.match(sqlQueryNew, /detail\.SalesContractsNo/);
+  assert.doesNotMatch(sqlQueryNew, /detail\.SalesContractsNo/);
   assert.match(sqlQueryNew, /detail\.CustomerCode/);
   assert.match(sqlQueryNew, /detail\.SizeCode/);
   assert.match(sqlQueryNew, /detail\.ProductCode/);
@@ -96,7 +96,7 @@ test("SQLQUERY uses tracking tables and SQLQUERY_NEW uses the cutting mapping ch
   assert.match(sqlQueryNew, /outboundRow\.ThoiGianXacNhanXuat/);
   assert.match(sqlQueryNew, /LIKE N'\[NP\]A%'/);
   assert.match(sqlQueryNew, /5, N'Xuất kho NPL', N'RM Outbound'/);
-  assert.match(sqlQueryNew, /MIN\(outboundCount\.ThoiGianXacNhanXuat\) AS FirstOutboundDate/);
+  assert.match(sqlQueryNew, /MIN\(outboundRows\.ThoiGianXacNhanXuat\) AS FirstOutboundDate/);
   assert.match(sqlQueryNew, /6, N'Nhận NPL từ kho', N'Receive Materials', materialOutbound\.FirstOutboundDate/);
   assert.match(sqlQueryNew, /CUTTING_PhieuXaVai AS relaxingRow/);
   assert.match(sqlQueryNew, /relaxingRow\.MaCay/);

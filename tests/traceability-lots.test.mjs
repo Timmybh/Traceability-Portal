@@ -88,8 +88,10 @@ test("SQLQUERY uses tracking tables and SQLQUERY_NEW uses the cutting mapping ch
   assert.match(receiptCondition, /detail\.BalanceNo/);
   assert.match(receiptCondition, /balance\.DocNo/);
   assert.match(receiptCondition, /balancePO\.PO/);
-  assert.match(receiptCondition, /balancePO\.ProductCode/);
-  assert.match(receiptCondition, /balancePO\.SeasonCode/);
+  assert.match(receiptCondition, /balance\.ProductCode/);
+  assert.match(receiptCondition, /balance\.SeasonCode/);
+  assert.doesNotMatch(receiptCondition, /balancePO\.ProductCode/);
+  assert.doesNotMatch(receiptCondition, /balancePO\.SeasonCode/);
   assert.match(receiptCondition, /COALESCE\(tc\.Mua, cap\.SeasonCode\)/);
   assert.doesNotMatch(receiptCondition, /detail\.SizeCode/);
   assert.doesNotMatch(receiptCondition, /detail\.ProductionOrderNo/);

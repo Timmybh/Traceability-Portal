@@ -32,7 +32,9 @@ Frontend phải lazy-load ảnh, hiển thị trạng thái đang tải/không c
 
 Tab RFID hiện tại lấy URL mặt trước/mặt sau từ `Tracking_RFID_Master_Image` ngay trong `SQLQUERY`. Backend loại hai URL khỏi JSON trả về, chỉ giữ metadata ngắn hạn để endpoint ảnh stream riêng. Vì frontend render dữ liệu chung trước rồi mới tải ảnh nền, tốc độ file server không chặn phần thông tin truy suất.
 
-Tab RFID mới dùng cùng cơ chế stream độc lập, nhưng xác định ảnh từ `TEC_ProductInformation.URLFrontImage` và `URLBackImage` bằng `sql/TRACEABILITY-NEW-IMAGE.sql`. Không cần cấu hình `SQLQUERY_IMAGE` hoặc `SQLQUERY_IMAGE_NEW` trong `.env`.
+Tab RFID mới dùng cùng cơ chế: URL ảnh được lấy từ `Tracking_RFID_Master_Image` ngay trong `SQLQUERY_NEW`, với điều kiện `image.RFID = mp.RFID`. Không cần cấu hình `SQLQUERY_IMAGE` hoặc `SQLQUERY_IMAGE_NEW` trong `.env`.
+
+Công đoạn 03 “Nhập kho NPL” nối `Bravo_PNK_Detail` với `Bravo_PNK_Master` theo phiếu, sau đó lọc theo khách hàng, mã hàng và lệnh sản xuất. Không lọc theo `SizeCode` vì phiếu nhập nguyên/phụ liệu có thể không lưu size thành phẩm.
 
 ```dotenv
 HOSTFILE=10.8.0.72:9231

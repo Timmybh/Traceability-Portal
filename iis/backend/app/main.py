@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from functools import lru_cache
 import json
 import logging
 import mimetypes
@@ -144,7 +143,7 @@ def _traceability_by_query(
     rfid: str,
     query: str | None,
     response: Response | None = None,
-    cache_legacy_images: bool = False,
+    image_source: Literal["legacy", "new"] | None = None,
 ):
     value = _validate_rfid(rfid)
     if not query:
@@ -157,9 +156,9 @@ def _traceability_by_query(
     if not rows:
         raise HTTPException(status_code=404, detail="Không tìm thấy RFID")
     result = rows[0]
-    if cache_legacy_images:
+    if image_source is not None:
         image_rows = _extract_image_rows(result)
-        _cache_image_rows("legacy", value, image_rows)
+        _cache_image_rows(image_source, value, image_rows)
     timeline_json = result.pop("TimelineJson", None)
     if timeline_json:
         try:
@@ -202,20 +201,14 @@ def _new_traceability_query() -> str | None:
     return re.sub(r"@rffid\b", "@RFID", query, flags=re.IGNORECASE)
 
 
-@lru_cache
-def _new_image_query() -> str:
-    query_path = Path(__file__).resolve().parents[1] / "sql" / "TRACEABILITY-NEW-IMAGE.sql"
-    return query_path.read_text(encoding="utf-8-sig")
-
-
 @app.get("/api/traceability")
 def traceability(response: Response, rfid: str = Query(..., min_length=1, max_length=100)):
-    return _traceability_by_query(rfid, get_settings().sqlquery, response, cache_legacy_images=True)
+    return _traceability_by_query(rfid, get_settings().sqlquery, response, image_source="legacy")
 
 
 @app.get("/api/traceability/new")
 def traceability_new(response: Response, rfid: str = Query(..., min_length=1, max_length=100)):
-    return _traceability_by_query(rfid, _new_traceability_query(), response)
+    return _traceability_by_query(rfid, _new_traceability_query(), response, image_source="new")
 
 
 @app.get("/api/traceability/po")
@@ -304,7 +297,9 @@ def _image_rows(rfid: str, source: Literal["legacy", "new"] = "legacy") -> list[
         if cached:
             _image_metadata_cache.pop(cache_key, None)
 
-    query = _new_image_query() if source == "new" else settings.sqlquery
+    query = _new_traceability_query() if source == "new" else settings.sqlquery
+    if not query:
+        raise ValueError("Câu truy vấn RFID chưa được cấu hình")
     rows = query_rows(settings, query, {"RFID": rfid})
     if source == "legacy":
         rows = _extract_image_rows(rows[0]) if rows else []

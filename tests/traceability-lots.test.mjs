@@ -73,6 +73,11 @@ test("SQLQUERY uses tracking tables and SQLQUERY_NEW uses the cutting mapping ch
   assert.match(sqlQueryNew, /master\.DocNo/);
   assert.match(sqlQueryNew, /master\.DocCode IN \(N'NK', N'NM'\)/);
   assert.match(sqlQueryNew, /master\.DocStatus = 4/);
+  const receiptCondition = sqlQueryNew.slice(
+    sqlQueryNew.indexOf(") AS receiptNotes") - 2200,
+    sqlQueryNew.indexOf(") AS receiptNotes"),
+  );
+  assert.doesNotMatch(receiptCondition, /detail\.SizeCode/);
   assert.match(sqlQueryNew, /WHEN N'NK' THEN N'Nguyên liệu'/);
   assert.match(sqlQueryNew, /WHEN N'NM' THEN N'Phụ liệu'/);
   assert.match(sqlQueryNew, /2, N'Số invoice', N'Invoice Number'/);
@@ -132,5 +137,7 @@ test("SQLQUERY uses tracking tables and SQLQUERY_NEW uses the cutting mapping ch
   assert.match(sqlQueryNew, /13, N'Xuất BTP', N'WIP Outbound'/);
   assert.match(sqlQueryNew, /15, N'Quét nhận BTP', N'WIP Scanning', wipOutbound\.StepDate/);
   assert.match(sqlQueryNew, /COALESCE\(traceabilityTimeline\.TimelineJson, JSON_QUERY\(N'\[\]'\)\) AS TimelineJson/);
-  assert.doesNotMatch(sqlQueryNew, /Tracking_RFID/);
+  assert.doesNotMatch(sqlQueryNew, /Tracking_RFID_Master(?:\s|AS)/);
+  assert.doesNotMatch(sqlQueryNew, /Tracking_RFID_Master_TimeLine/);
+  assert.match(sqlQueryNew, /Tracking_RFID_Master_Image/);
 });

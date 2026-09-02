@@ -40,6 +40,20 @@ SELECT
     mp.ThoiGianMap,
     mp.BarcodeTachCay,
     mp.NguoiMap,
+    (
+        SELECT TOP (1) image.URL
+        FROM dbo.Tracking_RFID_Master_Image AS image
+        WHERE image.RFID = mp.RFID
+          AND UPPER(RIGHT(RTRIM(image.URL), 6)) = N'MT.JPG'
+        ORDER BY image.Id DESC
+    ) AS URLFrontImage,
+    (
+        SELECT TOP (1) image.URL
+        FROM dbo.Tracking_RFID_Master_Image AS image
+        WHERE image.RFID = mp.RFID
+          AND UPPER(RIGHT(RTRIM(image.URL), 6)) = N'MS.JPG'
+        ORDER BY image.Id DESC
+    ) AS URLBackImage,
     COALESCE(traceabilityTimeline.TimelineJson, JSON_QUERY(N'[]')) AS TimelineJson
 FROM MappingRow AS mp
 INNER JOIN dbo.CUTTING_TemBarcode_TachCay AS tc
@@ -243,7 +257,6 @@ OUTER APPLY (
                 INNER JOIN dbo.Bravo_PNK_Master AS master
                     ON detail.PNKMasterId = master.ReceiptNotesId
                 WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), detail.CustomerCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), customer.CustomerCode)))
-                  AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.SizeCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), tc.TenSize)))
                   AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode)))
                   AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductionOrderNo))) = LTRIM(RTRIM(CONVERT(nvarchar(255), COALESCE(tc.LenhSanXuat, cap.LenhSanXuat))))
                   AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), master.DocNo))), N'') IS NOT NULL

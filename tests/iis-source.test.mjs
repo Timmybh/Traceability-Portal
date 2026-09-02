@@ -75,8 +75,8 @@ test("IIS frontend uses the Dong Tien logo, empty image state, and trace-mode se
   assert.doesNotMatch(script, /Tab này sử dụng SQLQUERY_NEW/);
   assert.match(script, /trace-mode-select/);
   assert.match(styles, /\.step-parent-row td \{ height: 66px/);
-  assert.match(styles, /\.step-detail-row td \{ height: 66px/);
-  assert.match(styles, /\.department-row td \{ height: 53px/);
+  assert.match(styles, /\.step-detail-row td \{ height: 48px/);
+  assert.match(styles, /\.department-row td \{ height: 44px/);
 });
 
 test("new RFID endpoint executes SQLQUERY_NEW", async () => {
@@ -87,7 +87,7 @@ test("new RFID endpoint executes SQLQUERY_NEW", async () => {
   assert.match(config, /sqlquery_new: str \| None = None/);
   assert.match(config, /sqlquery_new_file: str \| None = None/);
   assert.match(api, /@app\.get\("\/api\/traceability\/new"\)/);
-  assert.match(api, /_traceability_by_query\(rfid, _new_traceability_query\(\), response\)/);
+  assert.match(api, /_traceability_by_query\(rfid, _new_traceability_query\(\), response, image_source="new"\)/);
 });
 
 test("new RFID query is seek-oriented and has a production index script", async () => {
@@ -136,23 +136,20 @@ test("RFID image metadata is queried once and reused by both image requests", as
   assert.match(api, /_image_metadata_cache/);
   assert.match(api, /rows = _image_rows\(value, source\)/);
   assert.equal((api.match(/query_rows\(settings, query, \{"RFID": rfid\}\)/g) || []).length, 1);
-  assert.match(api, /_new_image_query\(\) if source == "new" else settings\.sqlquery/);
+  assert.match(api, /_new_traceability_query\(\) if source == "new" else settings\.sqlquery/);
   assert.doesNotMatch(config, /sqlquery_image/);
   assert.match(config, /image_metadata_cache_seconds/);
 });
 
-test("new RFID images use an independent TEC product image stream", async () => {
-  const [env, imageQuery, script] = await Promise.all([
+test("both RFID modes stream tracking images independently from rendered data", async () => {
+  const [env, script] = await Promise.all([
     read("iis/backend/.env.example"),
-    read("iis/backend/sql/TRACEABILITY-NEW-IMAGE.sql"),
     read("iis/frontend/assets/app.js"),
   ]);
   assert.doesNotMatch(env, /^SQLQUERY_IMAGE=/m);
   assert.doesNotMatch(env, /^SQLQUERY_IMAGE_NEW=/m);
   assert.match(env, /SQLQUERY=.*Tracking_RFID_Master_Image.*URLFrontImage.*URLBackImage/);
-  assert.match(imageQuery, /TEC_ProductInformation/);
-  assert.match(imageQuery, /URLFrontImage/);
-  assert.match(imageQuery, /URLBackImage/);
+  assert.match(env, /SQLQUERY_NEW=.*Tracking_RFID_Master_Image.*image\.RFID=mp\.RFID.*URLFrontImage.*URLBackImage/);
   assert.match(script, /source=\$\{source\}/);
   assert.match(script, /state\.traceMode === "rfid-new" \? "new" : "legacy"/);
   assert.match(script, /showData\(data\);[\s\S]*loadImages\(/);

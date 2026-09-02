@@ -253,15 +253,17 @@ OUTER APPLY (
                         WHEN N'NK' THEN N'Nguyên liệu'
                         WHEN N'NM' THEN N'Phụ liệu'
                     END AS Department
-                FROM dbo.Bravo_PNK_Detail AS detail
+                FROM dbo.Bravo_BCD_Detail_PO AS balancePO
+                INNER JOIN dbo.Bravo_BCD_Detail AS balance
+                    ON balance.Id = balancePO.IdDetail
+                INNER JOIN dbo.Bravo_PNK_Detail AS detail
+                    ON LTRIM(RTRIM(CONVERT(nvarchar(255), detail.BalanceNo))) =
+                       LTRIM(RTRIM(CONVERT(nvarchar(255), balance.DocNo)))
                 INNER JOIN dbo.Bravo_PNK_Master AS master
                     ON detail.PNKMasterId = master.Id
-                INNER JOIN dbo.Bravo_BCD_Detail AS balance
-                    ON LTRIM(RTRIM(CONVERT(nvarchar(255), balance.BalanceNo))) =
-                       LTRIM(RTRIM(CONVERT(nvarchar(255), detail.BalanceNo)))
-                WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), balance.ProductCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode)))
-                  AND LTRIM(RTRIM(CONVERT(nvarchar(255), master.CustomerCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), customer.CustomerCode)))
-                  AND LTRIM(RTRIM(CONVERT(nvarchar(255), balance.SeasonCode))) =
+                WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), balancePO.PO))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.PO)))
+                  AND LTRIM(RTRIM(CONVERT(nvarchar(255), balancePO.ProductCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode)))
+                  AND LTRIM(RTRIM(CONVERT(nvarchar(255), balancePO.SeasonCode))) =
                       LTRIM(RTRIM(REPLACE(CONVERT(nvarchar(255), COALESCE(tc.Mua, cap.SeasonCode)), N';', N'')))
                   AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), master.DocNo))), N'') IS NOT NULL
                   AND master.DocCode IN (N'NK', N'NM')

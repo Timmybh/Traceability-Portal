@@ -75,18 +75,21 @@ test("SQLQUERY uses tracking tables and SQLQUERY_NEW uses the cutting mapping ch
   assert.match(sqlQueryNew, /master\.DocStatus = 4/);
   const receiptEnd = sqlQueryNew.indexOf(") AS receiptNotes");
   const receiptCondition = sqlQueryNew.slice(
-    sqlQueryNew.lastIndexOf("FROM dbo.Bravo_PNK_Detail AS detail", receiptEnd),
+    sqlQueryNew.lastIndexOf("FROM dbo.Bravo_BCD_Detail_PO AS balancePO", receiptEnd),
     receiptEnd,
   );
   assert.match(receiptCondition, /Bravo_PNK_Detail AS detail/);
   assert.doesNotMatch(receiptCondition, /Bravo_PNK_Detail_DonHang/);
   assert.doesNotMatch(receiptCondition, /detail\.CustomerCode/);
-  assert.match(receiptCondition, /master\.CustomerCode/);
+  assert.doesNotMatch(receiptCondition, /master\.CustomerCode/);
+  assert.match(receiptCondition, /Bravo_BCD_Detail_PO AS balancePO/);
+  assert.match(receiptCondition, /balance\.Id = balancePO\.IdDetail/);
   assert.match(receiptCondition, /Bravo_BCD_Detail AS balance/);
   assert.match(receiptCondition, /detail\.BalanceNo/);
-  assert.match(receiptCondition, /balance\.BalanceNo/);
-  assert.match(receiptCondition, /balance\.ProductCode/);
-  assert.match(receiptCondition, /balance\.SeasonCode/);
+  assert.match(receiptCondition, /balance\.DocNo/);
+  assert.match(receiptCondition, /balancePO\.PO/);
+  assert.match(receiptCondition, /balancePO\.ProductCode/);
+  assert.match(receiptCondition, /balancePO\.SeasonCode/);
   assert.match(receiptCondition, /COALESCE\(tc\.Mua, cap\.SeasonCode\)/);
   assert.doesNotMatch(receiptCondition, /detail\.SizeCode/);
   assert.doesNotMatch(receiptCondition, /detail\.ProductionOrderNo/);

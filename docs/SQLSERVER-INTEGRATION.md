@@ -34,7 +34,7 @@ Tab RFID hiện tại lấy URL mặt trước/mặt sau từ `Tracking_RFID_Mas
 
 Tab RFID mới dùng cùng cơ chế: URL ảnh được lấy từ `Tracking_RFID_Master_Image` ngay trong `SQLQUERY_NEW`, với điều kiện `image.RFID = mp.RFID`. Không cần cấu hình `SQLQUERY_IMAGE` hoặc `SQLQUERY_IMAGE_NEW` trong `.env`.
 
-Công đoạn 03 “Nhập kho NPL” lấy chi tiết từ `Bravo_PNK_Detail`, nối `PNKMasterId` với `Bravo_PNK_Master.Id`, đồng thời nối `Bravo_BCD_Detail` theo `BalanceNo`. Mã hàng lấy từ `Bravo_BCD_Detail.ProductCode`, mùa lấy từ `Bravo_BCD_Detail.SeasonCode`, và khách hàng lấy từ `Bravo_PNK_Master.CustomerCode`. `Bravo_PNK_Detail.CustomerCode` là mã nhà cung cấp nên không dùng. Link xem phiếu cũng dùng `Bravo_PNK_Master.Id`. Không lọc theo `SizeCode` hoặc `ProductionOrderNo`.
+Công đoạn 03 “Nhập kho NPL” đi theo chuỗi khóa nghiệp vụ: RFID lấy PO, mã hàng và barcode tách cây từ `CUTTING_TemBarcode_TachCay_RFID_Mapping`; barcode nối `CUTTING_TemBarcode_TachCay.Code` để lấy mùa; PO, mã hàng và mùa nối `Bravo_BCD_Detail_PO` để lấy `IdDetail`; `IdDetail` nối `Bravo_BCD_Detail.Id` để lấy `DocNo`; cuối cùng `DocNo` nối `Bravo_PNK_Detail.BalanceNo` và `PNKMasterId` nối `Bravo_PNK_Master.Id` để lấy phiếu nhập. Link xem phiếu dùng `Bravo_PNK_Master.Id`.
 
 ```dotenv
 HOSTFILE=10.8.0.72:9231

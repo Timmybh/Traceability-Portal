@@ -3,8 +3,8 @@ SELECT TOP (1)
     JSON_QUERY((
         SELECT detail.*
         FROM dbo.Bravo_PNK_Detail AS detail
-        WHERE detail.PNKMasterId = master.ReceiptNotesId
+        WHERE detail.PNKMasterId = master.Id
         FOR JSON PATH
     )) AS DetailsJson
 FROM dbo.Bravo_PNK_Master AS master
-WHERE CONVERT(nvarchar(255), master.ReceiptNotesId) = @DocumentId;
+WHERE CONVERT(nvarchar(255), master.Id) = @DocumentId;

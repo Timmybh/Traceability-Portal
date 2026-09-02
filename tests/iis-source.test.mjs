@@ -127,6 +127,20 @@ test("non-PDF timeline documents use named parameterized print queries", async (
   }
 });
 
+test("RM receipt has a dedicated print layout without pricing columns", async () => {
+  const api = await read("iis/backend/app/main.py");
+  assert.match(api, /def _receipt_print_html\(row: dict\)/);
+  assert.match(api, /PHIẾU NHẬP KHO/);
+  assert.match(api, /doc_code == "NK"/);
+  assert.match(api, /Tên, nhãn hiệu quy cách phẩm chất vật tư/);
+  assert.match(api, /Của khách hàng:/);
+  assert.match(api, /reference_label = "Invoice" if is_material else "HĐGTGT"/);
+  assert.match(api, /Theo chứng từ/);
+  assert.match(api, /Thực nhập/);
+  const receiptTemplate = api.slice(api.indexOf("def _receipt_print_html"), api.indexOf("@app.get(\"/health\")"));
+  assert.doesNotMatch(receiptTemplate, /Đơn giá|Thành tiền|Thuế GTGT|Tổng tiền thanh toán/);
+});
+
 test("RFID image metadata is queried once and reused by both image requests", async () => {
   const [api, config] = await Promise.all([
     read("iis/backend/app/main.py"),

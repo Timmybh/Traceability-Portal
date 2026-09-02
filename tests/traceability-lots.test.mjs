@@ -69,15 +69,27 @@ test("SQLQUERY uses tracking tables and SQLQUERY_NEW uses the cutting mapping ch
   assert.match(sqlQueryNew, /detail\.SizeCode/);
   assert.match(sqlQueryNew, /detail\.ProductCode/);
   assert.match(sqlQueryNew, /detail\.ProductionOrderNo/);
-  assert.match(sqlQueryNew, /INNER JOIN dbo\.Bravo_PNK_Master AS master\s+ON detail\.PNKMasterId = master\.ReceiptNotesId/);
+  assert.match(sqlQueryNew, /INNER JOIN dbo\.Bravo_PNK_Master AS master\s+ON detail\.PNKMasterId = master\.Id/);
   assert.match(sqlQueryNew, /master\.DocNo/);
   assert.match(sqlQueryNew, /master\.DocCode IN \(N'NK', N'NM'\)/);
   assert.match(sqlQueryNew, /master\.DocStatus = 4/);
+  const receiptEnd = sqlQueryNew.indexOf(") AS receiptNotes");
   const receiptCondition = sqlQueryNew.slice(
-    sqlQueryNew.indexOf(") AS receiptNotes") - 2200,
-    sqlQueryNew.indexOf(") AS receiptNotes"),
+    sqlQueryNew.lastIndexOf("FROM dbo.Bravo_PNK_Detail AS detail", receiptEnd),
+    receiptEnd,
   );
+  assert.match(receiptCondition, /Bravo_PNK_Detail AS detail/);
+  assert.doesNotMatch(receiptCondition, /Bravo_PNK_Detail_DonHang/);
+  assert.doesNotMatch(receiptCondition, /detail\.CustomerCode/);
+  assert.match(receiptCondition, /master\.CustomerCode/);
+  assert.match(receiptCondition, /Bravo_BCD_Detail AS balance/);
+  assert.match(receiptCondition, /detail\.BalanceNo/);
+  assert.match(receiptCondition, /balance\.BalanceNo/);
+  assert.match(receiptCondition, /balance\.ProductCode/);
+  assert.match(receiptCondition, /balance\.SeasonCode/);
+  assert.match(receiptCondition, /COALESCE\(tc\.Mua, cap\.SeasonCode\)/);
   assert.doesNotMatch(receiptCondition, /detail\.SizeCode/);
+  assert.doesNotMatch(receiptCondition, /detail\.ProductionOrderNo/);
   assert.match(sqlQueryNew, /WHEN N'NK' THEN N'Nguyên liệu'/);
   assert.match(sqlQueryNew, /WHEN N'NM' THEN N'Phụ liệu'/);
   assert.match(sqlQueryNew, /2, N'Số invoice', N'Invoice Number'/);

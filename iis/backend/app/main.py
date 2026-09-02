@@ -128,6 +128,80 @@ body{{font:14px Arial,sans-serif;color:#172239;margin:24px}} header{{display:fle
 </style></head><body><header><div><h1>{escape(title)}</h1><p>Mã phiếu: {escape(document_id)}</p></div><button onclick="window.print()">In phiếu</button></header>{''.join(sections)}</body></html>"""
 
 
+def _first_value(row: dict, *names: str) -> str:
+    for name in names:
+        value = row.get(name)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return ""
+
+
+def _receipt_print_html(row: dict) -> str:
+    try:
+        details = json.loads(str(row.get("DetailsJson") or "[]"))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        details = []
+    if not isinstance(details, list):
+        details = []
+
+    doc_no = _first_value(row, "DocNo", "DocumentNo")
+    doc_code = _first_value(row, "DocCode").upper()
+    is_material = doc_code == "NK"
+    doc_date = _first_value(row, "DocDate", "DocumentDate", "NgayChungTu", "CreatedDate")
+    supplier = _first_value(row, "SupplierName", "VendorName", "ObjectName", "ContactName", "TenNhaCungCap")
+    warehouse = _first_value(row, "WarehouseName", "StockName", "WarehouseCode", "KhoNhap")
+    description = _first_value(row, "Description", "Content", "Note", "DienGiai")
+    first_detail = details[0] if details and isinstance(details[0], dict) else {}
+    contract = _first_value(first_detail, "SalesContractsNo", "PurchaseContractNo")
+    declaration = _first_value(first_detail, "CustomsDeclareNo")
+    invoice_no = _first_value(row, "InvoiceNo", "AtchDocNo", "ReferenceNo") or _first_value(first_detail, "AtchDocNo")
+    customer_content = _first_value(row, "CustomerContent", "CustomerName", "CustomerDescription", "DienGiaiKhachHang")
+    reference_label = "Invoice" if is_material else "HĐGTGT"
+    item_heading = "Tên, nhãn hiệu quy cách phẩm chất vật tư (sản phẩm, hàng hóa)" if is_material else "Mặt hàng"
+
+    body_rows = []
+    total_document = 0.0
+    total_received = 0.0
+    for index, detail in enumerate((item for item in details if isinstance(item, dict)), start=1):
+        item_name = _first_value(detail, "ItemName", "ProductName", "Description", "ItemDescription", "ArtCode")
+        item_code = _first_value(detail, "ItemCode", "MaterialCode", "ProductCode")
+        unit = _first_value(detail, "Unit", "UnitName")
+        document_quantity = _first_value(detail, "Quantity", "OrderQuantity", "DocumentQuantity")
+        received_quantity = _first_value(detail, "ActualQuantity", "ReceivedQuantity", "Quantity")
+        for value, target in ((document_quantity, "document"), (received_quantity, "received")):
+            try:
+                number = float(value.replace(".", "").replace(",", "."))
+            except (AttributeError, ValueError):
+                number = 0
+            if target == "document":
+                total_document += number
+            else:
+                total_received += number
+        body_rows.append(
+            "<tr>"
+            f"<td class='number'>{index}</td><td>{escape(item_name)}</td>"
+            f"<td>{escape(item_code)}</td><td>{escape(unit)}</td>"
+            f"<td class='quantity'>{escape(document_quantity)}</td>"
+            f"<td class='quantity'>{escape(received_quantity)}</td></tr>"
+        )
+
+    def total_text(value: float) -> str:
+        return f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    return f"""<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Phiếu nhập kho {escape(doc_no)}</title><style>
+@page{{size:A4 landscape;margin:10mm}} *{{box-sizing:border-box}} body{{margin:0;color:#111;font:14px "Times New Roman",serif}} .sheet{{max-width:1120px;margin:auto}} .company{{font-size:18px;font-weight:700}} .heading{{position:relative;text-align:center;margin:28px 0 12px}} h1{{margin:0;font-size:28px}} .doc-no{{position:absolute;right:0;bottom:3px;font-size:17px;font-weight:700}} .meta{{display:grid;grid-template-columns:1fr 1fr;gap:5px 28px;margin:0 36px 22px;font-size:16px}} .field{{display:flex;gap:8px}} .field b{{min-width:145px}} .value{{flex:1;border-bottom:1px dotted #777;font-weight:700}} table{{width:100%;border-collapse:collapse;table-layout:fixed}} th,td{{border:1px solid #222;padding:6px;vertical-align:top}} th{{background:#fffef0;text-align:center;font-size:15px}} th:nth-child(1){{width:5%}} th:nth-child(2){{width:43%}} th:nth-child(3){{width:16%}} th:nth-child(4){{width:9%}} th:nth-child(5),th:nth-child(6){{width:13.5%}} .number,.quantity{{text-align:right}} tbody td{{min-height:34px}} tfoot td{{background:#fffed5;font-weight:700}} .signatures{{display:grid;grid-template-columns:repeat(5,1fr);margin-top:48px;text-align:center;font-weight:700}} .actions{{position:fixed;right:18px;top:18px}} button{{border:0;border-radius:7px;background:#172239;padding:9px 16px;color:#fff;cursor:pointer}} @media print{{.actions{{display:none}}}}
+</style></head><body><div class="actions"><button onclick="window.print()">In phiếu</button></div><main class="sheet">
+<div class="company">CÔNG TY CP ĐỒNG TIẾN</div><div class="heading"><h1>PHIẾU NHẬP KHO</h1><span class="doc-no">Số: {escape(doc_no)}</span></div>
+<section class="meta"><div class="field"><b>Người giao hàng:</b><span class="value">{escape(supplier)}</span></div><div class="field"><b>Ngày:</b><span class="value">{escape(doc_date)}</span></div><div class="field"><b>Theo {reference_label}:</b><span class="value">{escape(invoice_no)}</span></div><div class="field"><b>Hợp đồng:</b><span class="value">{escape(contract)}</span></div>{f'<div class="field"><b>Của khách hàng:</b><span class="value">{escape(customer_content)}</span></div>' if is_material else f'<div class="field"><b>Nội dung nhập:</b><span class="value">{escape(description)}</span></div>'}<div class="field"><b>Số tờ khai:</b><span class="value">{escape(declaration)}</span></div><div class="field"><b>Nhập tại kho:</b><span class="value">{escape(warehouse)}</span></div></section>
+<table><thead><tr><th rowspan="2">STT</th><th rowspan="2">{item_heading}</th><th rowspan="2">Mã vật tư</th><th rowspan="2">ĐVT</th><th colspan="2">Số lượng</th></tr><tr><th>Theo chứng từ</th><th>Thực nhập</th></tr></thead>
+<tbody>{''.join(body_rows) if body_rows else '<tr><td colspan="6" style="text-align:center">Không có chi tiết vật tư</td></tr>'}</tbody>
+<tfoot><tr><td></td><td colspan="3">Tổng cộng:</td><td class="quantity">{total_text(total_document)}</td><td class="quantity">{total_text(total_received)}</td></tr></tfoot></table>
+<section class="signatures"><span>Thủ trưởng đơn vị</span><span>Thủ kho</span><span>Người giao</span><span>Kế toán trưởng</span><span>Người lập phiếu</span></section>
+</main></body></html>"""
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     settings = get_settings()
@@ -450,7 +524,8 @@ def print_traceability_document(
         raise _database_error(exc) from exc
     if not rows:
         raise HTTPException(status_code=404, detail="Không tìm thấy dữ liệu chi tiết phiếu")
-    return HTMLResponse(_temporary_print_html(title, value, rows))
+    html = _receipt_print_html(rows[0]) if document_type == "rm-receipt" else _temporary_print_html(title, value, rows)
+    return HTMLResponse(html)
 
 
 @app.get("/api/traceability/images")

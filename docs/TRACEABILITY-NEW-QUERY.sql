@@ -239,15 +239,15 @@ OUTER APPLY (
     SELECT
         JSON_QUERY((
             SELECT
-                receipt.ReceiptNotesId AS DetailId,
+                receipt.MasterId AS DetailId,
                 ROW_NUMBER() OVER (ORDER BY receipt.DocNo) AS DetailNo,
                 CAST(NULL AS datetime2) AS DetailDate,
                 CONCAT(N'Mã phiếu: ', receipt.DocNo) AS DetailContent,
-                CONCAT(N'/api/traceability/print/rm-receipt?id=', receipt.ReceiptNotesId) AS DetailLink,
+                CONCAT(N'/api/traceability/print/rm-receipt?id=', receipt.MasterId) AS DetailLink,
                 receipt.Department
             FROM (
                 SELECT DISTINCT
-                    master.ReceiptNotesId,
+                    master.Id AS MasterId,
                     LTRIM(RTRIM(CONVERT(nvarchar(255), master.DocNo))) AS DocNo,
                     CASE master.DocCode
                         WHEN N'NK' THEN N'Nguyên liệu'
@@ -255,10 +255,14 @@ OUTER APPLY (
                     END AS Department
                 FROM dbo.Bravo_PNK_Detail AS detail
                 INNER JOIN dbo.Bravo_PNK_Master AS master
-                    ON detail.PNKMasterId = master.ReceiptNotesId
-                WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), detail.CustomerCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), customer.CustomerCode)))
-                  AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode)))
-                  AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductionOrderNo))) = LTRIM(RTRIM(CONVERT(nvarchar(255), COALESCE(tc.LenhSanXuat, cap.LenhSanXuat))))
+                    ON detail.PNKMasterId = master.Id
+                INNER JOIN dbo.Bravo_BCD_Detail AS balance
+                    ON LTRIM(RTRIM(CONVERT(nvarchar(255), balance.BalanceNo))) =
+                       LTRIM(RTRIM(CONVERT(nvarchar(255), detail.BalanceNo)))
+                WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), balance.ProductCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode)))
+                  AND LTRIM(RTRIM(CONVERT(nvarchar(255), master.CustomerCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), customer.CustomerCode)))
+                  AND LTRIM(RTRIM(CONVERT(nvarchar(255), balance.SeasonCode))) =
+                      LTRIM(RTRIM(REPLACE(CONVERT(nvarchar(255), COALESCE(tc.Mua, cap.SeasonCode)), N';', N'')))
                   AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), master.DocNo))), N'') IS NOT NULL
                   AND master.DocCode IN (N'NK', N'NM')
                   AND master.DocStatus = 4

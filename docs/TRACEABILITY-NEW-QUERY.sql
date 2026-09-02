@@ -262,9 +262,7 @@ OUTER APPLY (
                 INNER JOIN dbo.Bravo_PNK_Master AS master
                     ON detail.PNKMasterId = master.Id
                 WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), balancePO.PO))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.PO)))
-                  AND LTRIM(RTRIM(CONVERT(nvarchar(255), balance.ProductCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode)))
-                  AND LTRIM(RTRIM(CONVERT(nvarchar(255), balance.SeasonCode))) =
-                      LTRIM(RTRIM(REPLACE(CONVERT(nvarchar(255), COALESCE(tc.Mua, cap.SeasonCode)), N';', N'')))
+                  AND LTRIM(RTRIM(CONVERT(nvarchar(255), balancePO.ProductCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode)))
                   AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), master.DocNo))), N'') IS NOT NULL
                   AND master.DocCode IN (N'NK', N'NM')
                   AND master.DocStatus = 4

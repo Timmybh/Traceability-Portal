@@ -30,10 +30,11 @@ Không trả dữ liệu ảnh trong API tra cứu chính. Hai luồng hoạt đ
 
 Frontend phải lazy-load ảnh, hiển thị trạng thái đang tải/không có ảnh/lỗi ảnh và không được chặn phần thông tin chung. API ảnh cần hỗ trợ cache HTTP; nếu ảnh đang lưu dạng binary trong SQL Server thì backend chỉ đọc ở endpoint ảnh.
 
-Nguồn ảnh hiện tại là bảng `eGMF.dbo.Tracking_RFID_Master_Image`:
+Tab RFID hiện tại lấy URL mặt trước/mặt sau từ `Tracking_RFID_Master_Image` ngay trong `SQLQUERY`. Backend loại hai URL khỏi JSON trả về, chỉ giữ metadata ngắn hạn để endpoint ảnh stream riêng. Vì frontend render dữ liệu chung trước rồi mới tải ảnh nền, tốc độ file server không chặn phần thông tin truy suất.
+
+Tab RFID mới dùng cùng cơ chế stream độc lập, nhưng xác định ảnh từ `TEC_ProductInformation.URLFrontImage` và `URLBackImage` bằng `sql/TRACEABILITY-NEW-IMAGE.sql`. Không cần cấu hình `SQLQUERY_IMAGE` hoặc `SQLQUERY_IMAGE_NEW` trong `.env`.
 
 ```dotenv
-SQLQUERY_IMAGE=select top (2) [Id], [RFID], [Url], [RFID_Hex] from [eGMF].[dbo].[Tracking_RFID_Master_Image] where [RFID] = @RFID order by [Id]
 HOSTFILE=10.8.0.72:9231
 IMAGE_TIMEOUT_SECONDS=15
 ```

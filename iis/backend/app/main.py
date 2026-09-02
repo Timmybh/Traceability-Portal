@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from functools import lru_cache
 import json
 import logging
 import mimetypes
@@ -38,7 +39,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="Web Truy suất API", version="1.0.0", lifespan=lifespan)
 
-_image_metadata_cache: dict[str, tuple[float, list[dict]]] = {}
+_image_metadata_cache: dict[tuple[str, str], tuple[float, list[dict]]] = {}
 _image_metadata_cache_lock = Lock()
 
 _PRINT_QUERY_TYPES = {
@@ -139,7 +140,12 @@ def health() -> dict[str, str]:
         return {"status": "degraded", "database": "unavailable"}
 
 
-def _traceability_by_query(rfid: str, query: str | None, response: Response | None = None):
+def _traceability_by_query(
+    rfid: str,
+    query: str | None,
+    response: Response | None = None,
+    cache_legacy_images: bool = False,
+):
     value = _validate_rfid(rfid)
     if not query:
         raise HTTPException(status_code=503, detail="Câu truy vấn chưa được cấu hình")
@@ -151,6 +157,9 @@ def _traceability_by_query(rfid: str, query: str | None, response: Response | No
     if not rows:
         raise HTTPException(status_code=404, detail="Không tìm thấy RFID")
     result = rows[0]
+    if cache_legacy_images:
+        image_rows = _extract_image_rows(result)
+        _cache_image_rows("legacy", value, image_rows)
     timeline_json = result.pop("TimelineJson", None)
     if timeline_json:
         try:
@@ -193,9 +202,15 @@ def _new_traceability_query() -> str | None:
     return re.sub(r"@rffid\b", "@RFID", query, flags=re.IGNORECASE)
 
 
+@lru_cache
+def _new_image_query() -> str:
+    query_path = Path(__file__).resolve().parents[1] / "sql" / "TRACEABILITY-NEW-IMAGE.sql"
+    return query_path.read_text(encoding="utf-8-sig")
+
+
 @app.get("/api/traceability")
 def traceability(response: Response, rfid: str = Query(..., min_length=1, max_length=100)):
-    return _traceability_by_query(rfid, get_settings().sqlquery, response)
+    return _traceability_by_query(rfid, get_settings().sqlquery, response, cache_legacy_images=True)
 
 
 @app.get("/api/traceability/new")
@@ -249,14 +264,38 @@ def _image_url_for_side(rows: list[dict], side: Literal["front", "back"]) -> str
     suffix = "MT.JPG" if side == "front" else "MS.JPG"
     for row in rows:
         url = str(row.get("Url") or row.get("URL") or "").strip()
-        if url.upper().endswith(suffix):
+        row_side = str(row.get("Side") or row.get("SIDE") or "").strip().casefold()
+        if row_side == side or (not row_side and url.upper().endswith(suffix)):
             return url
     raise HTTPException(status_code=404, detail="Không tìm thấy ảnh")
 
 
-def _image_rows(rfid: str) -> list[dict]:
+def _extract_image_rows(result: dict) -> list[dict]:
+    rows = []
+    for column, side in (("URLFrontImage", "front"), ("URLBackImage", "back")):
+        url = str(result.pop(column, None) or "").strip()
+        if url:
+            rows.append({"Url": url, "Side": side})
+    return rows
+
+
+def _cache_image_rows(source: str, rfid: str, rows: list[dict]) -> None:
+    now = monotonic()
+    cache_key = (source, rfid.casefold())
+    expires_at = now + get_settings().image_metadata_cache_seconds
+    with _image_metadata_cache_lock:
+        if len(_image_metadata_cache) >= 1000:
+            expired_keys = [key for key, item in _image_metadata_cache.items() if item[0] <= now]
+            for key in expired_keys:
+                _image_metadata_cache.pop(key, None)
+            if len(_image_metadata_cache) >= 1000:
+                _image_metadata_cache.pop(next(iter(_image_metadata_cache)))
+        _image_metadata_cache[cache_key] = (expires_at, rows)
+
+
+def _image_rows(rfid: str, source: Literal["legacy", "new"] = "legacy") -> list[dict]:
     settings = get_settings()
-    cache_key = rfid.casefold()
+    cache_key = (source, rfid.casefold())
     now = monotonic()
     with _image_metadata_cache_lock:
         cached = _image_metadata_cache.get(cache_key)
@@ -265,17 +304,11 @@ def _image_rows(rfid: str) -> list[dict]:
         if cached:
             _image_metadata_cache.pop(cache_key, None)
 
-    rows = query_rows(settings, settings.sqlquery_image, {"RFID": rfid})
-    expires_at = now + settings.image_metadata_cache_seconds
-    with _image_metadata_cache_lock:
-        # Giữ cache có giới hạn cho tiến trình IIS chạy lâu ngày.
-        if len(_image_metadata_cache) >= 1000:
-            expired_keys = [key for key, item in _image_metadata_cache.items() if item[0] <= now]
-            for key in expired_keys:
-                _image_metadata_cache.pop(key, None)
-            if len(_image_metadata_cache) >= 1000:
-                _image_metadata_cache.pop(next(iter(_image_metadata_cache)))
-        _image_metadata_cache[cache_key] = (expires_at, rows)
+    query = _new_image_query() if source == "new" else settings.sqlquery
+    rows = query_rows(settings, query, {"RFID": rfid})
+    if source == "legacy":
+        rows = _extract_image_rows(rows[0]) if rows else []
+    _cache_image_rows(source, rfid, rows)
     return rows
 
 
@@ -426,17 +459,21 @@ def print_traceability_document(
 
 
 @app.get("/api/traceability/images")
-def image_metadata(rfid: str = Query(..., min_length=1, max_length=100)):
+def image_metadata(
+    rfid: str = Query(..., min_length=1, max_length=100),
+    source: Literal["legacy", "new"] = "legacy",
+):
     value = _validate_rfid(rfid)
     try:
-        rows = _image_rows(value)
+        rows = _image_rows(value, source)
     except (pyodbc.Error, ValueError) as exc:
         raise _database_error(exc) from exc
     available = {"front": False, "back": False}
     for row in rows:
         url = str(row.get("Url") or row.get("URL") or "").upper()
-        available["front"] = available["front"] or url.endswith("MT.JPG")
-        available["back"] = available["back"] or url.endswith("MS.JPG")
+        side = str(row.get("Side") or row.get("SIDE") or "").strip().casefold()
+        available["front"] = available["front"] or side == "front" or (not side and url.endswith("MT.JPG"))
+        available["back"] = available["back"] or side == "back" or (not side and url.endswith("MS.JPG"))
     return available
 
 
@@ -444,13 +481,14 @@ def image_metadata(rfid: str = Query(..., min_length=1, max_length=100)):
 def product_image(
     rfid: str = Query(..., min_length=1, max_length=100),
     side: Literal["front", "back"] = "front",
+    source: Literal["legacy", "new"] = "legacy",
 ):
     settings = get_settings()
     value = _validate_rfid(rfid)
     client: httpx.Client | None = None
     upstream: httpx.Response | None = None
     try:
-        rows = _image_rows(value)
+        rows = _image_rows(value, source)
         url = _image_url_for_side(rows, side)
         _validate_internal_url(url, settings.hostfile)
         client = httpx.Client(timeout=settings.image_timeout_seconds, follow_redirects=False)

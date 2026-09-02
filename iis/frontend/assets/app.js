@@ -496,8 +496,8 @@ async function getJson(url) {
   return response.json();
 }
 
-function imageUrl(side = state.side, rfid = state.rfid) {
-  return `/api/traceability/image?rfid=${encodeURIComponent(rfid)}&side=${side}`;
+function imageUrl(side = state.side, rfid = state.rfid, source = state.traceMode === "rfid-new" ? "new" : "legacy") {
+  return `/api/traceability/image?rfid=${encodeURIComponent(rfid)}&side=${side}&source=${source}`;
 }
 
 function renderImage() {
@@ -585,18 +585,18 @@ function preloadImage(url) {
   });
 }
 
-async function loadImages(rfid, searchId, dataDurationMs) {
+async function loadImages(rfid, searchId, dataDurationMs, source) {
   const imageStarted = performance.now();
   let available;
   try {
-    available = await getJson(`/api/traceability/images?rfid=${encodeURIComponent(rfid)}`);
+    available = await getJson(`/api/traceability/images?rfid=${encodeURIComponent(rfid)}&source=${source}`);
   } catch (_) {
     available = { front: false, back: false };
   }
 
   const sides = ["front", "back"];
   const loaded = await Promise.all(sides.map((side) => (
-    available[side] ? preloadImage(imageUrl(side, rfid)) : Promise.resolve(false)
+    available[side] ? preloadImage(imageUrl(side, rfid, source)) : Promise.resolve(false)
   )));
   if (searchId !== state.searchId || rfid !== state.rfid) return;
 
@@ -642,7 +642,7 @@ async function search(rfid, trackStatus = false) {
     const dataDurationMs = performance.now() - dataStarted;
     setQueryStatus(`Tải dữ liệu xong (${(dataDurationMs / 1000).toFixed(1)}s)`, state.rfid, "data");
     setNotice("Đã tải dữ liệu RFID", "success");
-    loadImages(state.rfid, searchId, dataDurationMs);
+    loadImages(state.rfid, searchId, dataDurationMs, state.traceMode === "rfid-new" ? "new" : "legacy");
   } catch (error) {
     if (searchId !== state.searchId) return;
     if (error.status === 404 || /không tìm thấy/i.test(error.message)) setQueryStatus("Không tìm thấy dữ liệu", state.rfid, "complete");

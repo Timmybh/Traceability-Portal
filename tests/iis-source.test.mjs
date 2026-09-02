@@ -132,11 +132,30 @@ test("RFID image metadata is queried once and reused by both image requests", as
     read("iis/backend/app/main.py"),
     read("iis/backend/app/config.py"),
   ]);
-  assert.match(api, /def _image_rows\(rfid: str\)/);
+  assert.match(api, /def _image_rows\(rfid: str, source:/);
   assert.match(api, /_image_metadata_cache/);
-  assert.match(api, /rows = _image_rows\(value\)/);
-  assert.equal((api.match(/query_rows\(settings, settings\.sqlquery_image/g) || []).length, 1);
+  assert.match(api, /rows = _image_rows\(value, source\)/);
+  assert.equal((api.match(/query_rows\(settings, query, \{"RFID": rfid\}\)/g) || []).length, 1);
+  assert.match(api, /_new_image_query\(\) if source == "new" else settings\.sqlquery/);
+  assert.doesNotMatch(config, /sqlquery_image/);
   assert.match(config, /image_metadata_cache_seconds/);
+});
+
+test("new RFID images use an independent TEC product image stream", async () => {
+  const [env, imageQuery, script] = await Promise.all([
+    read("iis/backend/.env.example"),
+    read("iis/backend/sql/TRACEABILITY-NEW-IMAGE.sql"),
+    read("iis/frontend/assets/app.js"),
+  ]);
+  assert.doesNotMatch(env, /^SQLQUERY_IMAGE=/m);
+  assert.doesNotMatch(env, /^SQLQUERY_IMAGE_NEW=/m);
+  assert.match(env, /SQLQUERY=.*Tracking_RFID_Master_Image.*URLFrontImage.*URLBackImage/);
+  assert.match(imageQuery, /TEC_ProductInformation/);
+  assert.match(imageQuery, /URLFrontImage/);
+  assert.match(imageQuery, /URLBackImage/);
+  assert.match(script, /source=\$\{source\}/);
+  assert.match(script, /state\.traceMode === "rfid-new" \? "new" : "legacy"/);
+  assert.match(script, /showData\(data\);[\s\S]*loadImages\(/);
 });
 
 test("timeline hides the content column and uses an icon-only document preview", async () => {

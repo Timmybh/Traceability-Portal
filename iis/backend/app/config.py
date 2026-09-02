@@ -25,7 +25,6 @@ class Settings(BaseSettings):
     sqlserver_connection_timeout: int = Field(default=5, ge=1, le=60)
 
     sqlquery: str
-    sqlquery_image: str
     sqlquery_po: str
     sqlquery_lot: str
     sqlquery_new: str | None = None

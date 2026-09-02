@@ -106,7 +106,6 @@ if (-not (Test-Path $EnvFile)) {
 Sync-EnvSetting -Name "SQLQUERY" -SourcePath $EnvExampleFile -TargetPath $EnvFile
 Sync-EnvSetting -Name "SQLQUERY_NEW" -SourcePath $EnvExampleFile -TargetPath $EnvFile
 Sync-EnvSetting -Name "SQLQUERY_NEW_FILE" -SourcePath $EnvExampleFile -TargetPath $EnvFile
-Sync-EnvSetting -Name "SQLQUERY_IMAGE" -SourcePath $EnvExampleFile -TargetPath $EnvFile
 Sync-EnvSetting -Name "SQLQUERY_PO" -SourcePath $EnvExampleFile -TargetPath $EnvFile
 Sync-EnvSetting -Name "SQLQUERY_LOT" -SourcePath $EnvExampleFile -TargetPath $EnvFile
 Sync-EnvSetting -Name "IMAGE_METADATA_CACHE_SECONDS" -SourcePath $EnvExampleFile -TargetPath $EnvFile

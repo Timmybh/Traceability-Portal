@@ -263,10 +263,7 @@ OUTER APPLY (
                     receiptInspection.PGDId,
                     LTRIM(RTRIM(CONVERT(nvarchar(255), receiptInspection.MaPhieu))) AS MaPhieu,
                     receiptInspection.NgayGiamDinh,
-                    CASE LOWER(LTRIM(RTRIM(CONVERT(nvarchar(20), receiptInspection.LoaiGiamDinh))))
-                        WHEN N'nl' THEN N'Nguyên liệu'
-                        WHEN N'pl' THEN N'Phụ liệu'
-                    END AS Department
+                    N'Nguyên liệu' AS Department
                 FROM dbo.WH_ChiTietPhieuGiamDinh_Cay AS receiptTree
                 INNER JOIN dbo.WH_ChiTietPhieuGiamDinh AS receiptDetail
                     ON receiptDetail.CTPGDId = receiptTree.CTPGDId
@@ -274,9 +271,28 @@ OUTER APPLY (
                     ON receiptInspection.PGDId = receiptDetail.PGDId
                 WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), receiptTree.MaCay))) =
                       LTRIM(RTRIM(CONVERT(nvarchar(255), tc.MaCay)))
-                  AND LOWER(LTRIM(RTRIM(CONVERT(nvarchar(20), receiptInspection.LoaiGiamDinh)))) IN (N'nl', N'pl')
+                  AND LOWER(LTRIM(RTRIM(CONVERT(nvarchar(20), receiptInspection.LoaiGiamDinh)))) = N'nl'
                   AND ISNULL(UPPER(LTRIM(RTRIM(CONVERT(nvarchar(50), receiptInspection.TrangThai)))), N'') <> N'HUY'
                   AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), receiptInspection.MaPhieu))), N'') IS NOT NULL
+
+                UNION ALL
+
+                SELECT DISTINCT
+                    plReceiptInspection.PGDId,
+                    LTRIM(RTRIM(CONVERT(nvarchar(255), plReceiptInspection.MaPhieu))) AS MaPhieu,
+                    plReceiptInspection.NgayGiamDinh,
+                    N'Phụ liệu' AS Department
+                FROM dbo.CUTTING_PhieuCapBTP_ChiTietCapPhuLieu AS plReceiptIssue
+                INNER JOIN dbo.WH_ChiTietPhieuGiamDinh_Cay AS plReceiptTree
+                    ON plReceiptTree.MaCay = plReceiptIssue.BarcodePhuLieu
+                INNER JOIN dbo.WH_ChiTietPhieuGiamDinh AS plReceiptDetail
+                    ON plReceiptDetail.CTPGDId = plReceiptTree.CTPGDId
+                INNER JOIN dbo.WH_PhieuGiamDinh AS plReceiptInspection
+                    ON plReceiptInspection.PGDId = plReceiptDetail.PGDId
+                WHERE plReceiptIssue.IdCapBTPCT = cap.IdCapBTPCT
+                  AND LOWER(LTRIM(RTRIM(CONVERT(nvarchar(20), plReceiptInspection.LoaiGiamDinh)))) = N'pl'
+                  AND ISNULL(UPPER(LTRIM(RTRIM(CONVERT(nvarchar(50), plReceiptInspection.TrangThai)))), N'') <> N'HUY'
+                  AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), plReceiptInspection.MaPhieu))), N'') IS NOT NULL
             ) AS receipt
             ORDER BY receipt.Department, receipt.NgayGiamDinh, receipt.MaPhieu
             FOR JSON PATH
@@ -336,13 +352,14 @@ OUTER APPLY (
                     LTRIM(RTRIM(CONVERT(nvarchar(255), plInspectionRow.MaPhieu))) AS MaPhieu,
                     plInspectionRow.NgayGiamDinh,
                     N'Phụ liệu' AS Department
-                FROM dbo.WH_ChiTietPhieuGiamDinh_Cay AS plInspectionTree
+                FROM dbo.CUTTING_PhieuCapBTP_ChiTietCapPhuLieu AS plIssue
+                INNER JOIN dbo.WH_ChiTietPhieuGiamDinh_Cay AS plInspectionTree
+                    ON plInspectionTree.MaCay = plIssue.BarcodePhuLieu
                 INNER JOIN dbo.WH_ChiTietPhieuGiamDinh AS plInspectionDetail
                     ON plInspectionDetail.CTPGDId = plInspectionTree.CTPGDId
                 INNER JOIN dbo.WH_PhieuGiamDinh AS plInspectionRow
                     ON plInspectionRow.PGDId = plInspectionDetail.PGDId
-                WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), plInspectionTree.MaCay))) =
-                      LTRIM(RTRIM(CONVERT(nvarchar(255), tc.MaCay)))
+                WHERE plIssue.IdCapBTPCT = cap.IdCapBTPCT
                   AND LOWER(LTRIM(RTRIM(CONVERT(nvarchar(20), plInspectionRow.LoaiGiamDinh)))) = N'pl'
                   AND ISNULL(UPPER(LTRIM(RTRIM(CONVERT(nvarchar(50), plInspectionRow.TrangThai)))), N'') <> N'HUY'
                   AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), plInspectionRow.MaPhieu))), N'') IS NOT NULL
@@ -372,13 +389,14 @@ OUTER APPLY (
             CONVERT(nvarchar(255), plInspectionRow.PGDId) AS DocId,
             LTRIM(RTRIM(CONVERT(nvarchar(255), plInspectionRow.MaPhieu))) AS MaPhieu,
             plInspectionRow.NgayGiamDinh
-        FROM dbo.WH_ChiTietPhieuGiamDinh_Cay AS plInspectionTree
+        FROM dbo.CUTTING_PhieuCapBTP_ChiTietCapPhuLieu AS plIssue
+        INNER JOIN dbo.WH_ChiTietPhieuGiamDinh_Cay AS plInspectionTree
+            ON plInspectionTree.MaCay = plIssue.BarcodePhuLieu
         INNER JOIN dbo.WH_ChiTietPhieuGiamDinh AS plInspectionDetail
             ON plInspectionDetail.CTPGDId = plInspectionTree.CTPGDId
         INNER JOIN dbo.WH_PhieuGiamDinh AS plInspectionRow
             ON plInspectionRow.PGDId = plInspectionDetail.PGDId
-        WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), plInspectionTree.MaCay))) =
-              LTRIM(RTRIM(CONVERT(nvarchar(255), tc.MaCay)))
+        WHERE plIssue.IdCapBTPCT = cap.IdCapBTPCT
           AND LOWER(LTRIM(RTRIM(CONVERT(nvarchar(20), plInspectionRow.LoaiGiamDinh)))) = N'pl'
           AND ISNULL(UPPER(LTRIM(RTRIM(CONVERT(nvarchar(50), plInspectionRow.TrangThai)))), N'') <> N'HUY'
           AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), plInspectionRow.MaPhieu))), N'') IS NOT NULL

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 from contextlib import asynccontextmanager
 from datetime import datetime
 import json
@@ -730,6 +732,50 @@ def technical_document(document_id: int = Query(..., alias="id", ge=1)):
             client.close()
 
     return StreamingResponse(stream_content(), media_type=content_type, headers=headers)
+
+
+_BASE64_IMAGE_SIGNATURES: dict[str, str] = {
+    "iVBORw0KGgo": "image/png",
+    "/9j/": "image/jpeg",
+    "R0lGOD": "image/gif",
+    "Qk0": "image/bmp",
+}
+
+
+def _validate_legacy_document_url(url: str, allowed_hosts: str) -> None:
+    parsed = urlparse(url)
+    hosts = {host.strip().lower() for host in allowed_hosts.split(",") if host.strip()}
+    if parsed.scheme not in {"http", "https"} or parsed.netloc.lower() not in hosts:
+        raise HTTPException(status_code=502, detail="Địa chỉ tài liệu không được phép")
+
+
+@app.get("/api/traceability/legacy-document")
+def legacy_document(url: str = Query(..., min_length=1, max_length=2000)):
+    settings = get_settings()
+    _validate_legacy_document_url(url, settings.legacy_document_hosts)
+    try:
+        with httpx.Client(timeout=settings.image_timeout_seconds, follow_redirects=True) as client:
+            upstream = client.get(url)
+            upstream.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Không tải được tài liệu nội bộ") from exc
+
+    content_type = upstream.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    body = upstream.content
+    if content_type.startswith("image/"):
+        return Response(content=body, media_type=content_type)
+
+    # Máy chủ tài liệu cũ trả về chuỗi base64 của ảnh thay vì bytes ảnh thật.
+    text = body.decode("utf-8", errors="ignore").strip().strip('"')
+    for prefix, mime in _BASE64_IMAGE_SIGNATURES.items():
+        if text.startswith(prefix):
+            try:
+                decoded = base64.b64decode(text, validate=False)
+            except (binascii.Error, ValueError) as exc:
+                raise HTTPException(status_code=502, detail="Không giải mã được ảnh") from exc
+            return Response(content=decoded, media_type=mime)
+
+    return Response(content=body, media_type=content_type or "application/octet-stream")
 
 
 @app.get("/api/traceability/print/{document_type}", response_class=HTMLResponse)

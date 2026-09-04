@@ -110,6 +110,7 @@ Sync-EnvSetting -Name "SQLQUERY_PO" -SourcePath $EnvExampleFile -TargetPath $Env
 Sync-EnvSetting -Name "SQLQUERY_LOT" -SourcePath $EnvExampleFile -TargetPath $EnvFile
 Sync-EnvSetting -Name "IMAGE_METADATA_CACHE_SECONDS" -SourcePath $EnvExampleFile -TargetPath $EnvFile
 Sync-EnvSetting -Name "HOSTFILE" -SourcePath $EnvExampleFile -TargetPath $EnvFile
+Sync-EnvSetting -Name "LEGACY_DOCUMENT_HOSTS" -SourcePath $EnvExampleFile -TargetPath $EnvFile
 
 if ((Get-Content $EnvFile -Raw) -match "(?m)^SQLSERVER_(HOST|USER|PASSWORD)=\s*$") {
     throw "The .env file must define SQLSERVER_HOST, SQLSERVER_USER, and SQLSERVER_PASSWORD."

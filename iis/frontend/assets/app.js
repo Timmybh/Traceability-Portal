@@ -56,7 +56,11 @@ function safeLink(value) {
 
 function previewLink(link) {
   if (!link) return "—";
-  return `<a class="preview-link document-preview" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" aria-label="Xem chứng từ" title="Xem chứng từ">
+  const isOwnPrintPage = /^\/api\/traceability\//.test(link);
+  const href = state.traceMode !== "rfid-new" && !isOwnPrintPage
+    ? `/api/traceability/legacy-document?url=${encodeURIComponent(link)}`
+    : link;
+  return `<a class="preview-link document-preview" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" aria-label="Xem chứng từ" title="Xem chứng từ">
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M13 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8"></path>
       <path d="M13 2v6h6"></path>

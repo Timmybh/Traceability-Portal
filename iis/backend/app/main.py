@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from datetime import datetime
 import json
 import logging
 import mimetypes
@@ -148,6 +149,10 @@ def _receipt_print_html(row: dict) -> str:
     doc_code = _first_value(row, "DocCode").upper()
     is_material = doc_code == "NK"
     doc_date = _first_value(row, "DocDate", "DocumentDate", "NgayChungTu", "CreatedDate")
+    try:
+        doc_date = datetime.fromisoformat(doc_date).strftime("%d/%m/%Y")
+    except ValueError:
+        pass
     supplier = _first_value(row, "SupplierName", "VendorName", "ObjectName", "ContactName", "TenNhaCungCap")
     warehouse = _first_value(row, "WarehouseName", "StockName", "WarehouseCode", "KhoNhap")
     description = _first_value(row, "Description", "Content", "Note", "DienGiai")

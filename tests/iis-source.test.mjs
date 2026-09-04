@@ -128,7 +128,10 @@ test("non-PDF timeline documents use named parameterized print queries", async (
 });
 
 test("RM receipt has a dedicated print layout without pricing columns", async () => {
-  const api = await read("iis/backend/app/main.py");
+  const [api, query] = await Promise.all([
+    read("iis/backend/app/main.py"),
+    read("iis/backend/sql/print/rm-receipt.sql"),
+  ]);
   assert.match(api, /def _receipt_print_html\(row: dict\)/);
   assert.match(api, /PHIẾU NHẬP KHO/);
   assert.match(api, /doc_code == "NK"/);
@@ -137,8 +140,25 @@ test("RM receipt has a dedicated print layout without pricing columns", async ()
   assert.match(api, /reference_label = "Invoice" if is_material else "HĐGTGT"/);
   assert.match(api, /Theo chứng từ/);
   assert.match(api, /Thực nhập/);
+  assert.match(api, /strftime\("%d\/%m\/%Y"\)/);
   const receiptTemplate = api.slice(api.indexOf("def _receipt_print_html"), api.indexOf("@app.get(\"/health\")"));
   assert.doesNotMatch(receiptTemplate, /Đơn giá|Thành tiền|Thuế GTGT|Tổng tiền thanh toán/);
+  assert.match(query, /WH_ChiTietPhieuGiamDinh AS detail/);
+  assert.match(query, /detail\.TenNPL AS ItemName/);
+  assert.match(query, /detail\.MaNPL AS ItemCode/);
+  assert.match(query, /CAST\(inspection\.NgayGiamDinh AS date\) AS DocDate/);
+  assert.doesNotMatch(query, /Bravo_PNK/);
+});
+
+test("RM inspection reads QM inspection trees and their defect details", async () => {
+  const query = await read("iis/backend/sql/print/rm-inspection.sql");
+  assert.match(query, /QM_PhieuKiemVai AS inspectionRow/);
+  assert.match(query, /QM_PhieuKiemVai_CayVai AS inspectionTree/);
+  assert.match(query, /QM_PhieuKiemVai_Cay_ChiTiet AS defect/);
+  assert.match(query, /defect\.CTId = inspectionTree\.CTId/);
+  assert.match(query, /inspectionTree\.PKVId = inspectionRow\.PKVId/);
+  assert.match(query, /inspectionRow\.PKVId\) = @DocumentId/);
+  assert.doesNotMatch(query, /WH_PhieuGiamDinh|Bravo_PNK/);
 });
 
 test("RFID image metadata is queried once and reused by both image requests", async () => {

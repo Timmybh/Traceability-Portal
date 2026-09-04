@@ -25,7 +25,7 @@ SELECT
     customer.TenNgan,
     mp.PO,
     mp.ProductCode,
-    CAST(NULL AS nvarchar(200)) AS ItemId,
+    productionItem.ItemId,
     NULLIF(LTRIM(RTRIM(tc.TenSize)), N'') AS Size,
     CAST(NULL AS nvarchar(500)) AS Art,
     cap.TenMau AS Color,
@@ -58,6 +58,19 @@ SELECT
 FROM MappingRow AS mp
 INNER JOIN dbo.CUTTING_TemBarcode_TachCay AS tc
     ON tc.Code = mp.BarcodeTachCay
+OUTER APPLY (
+    SELECT TOP (1)
+        NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(200), productionOrder.Size_Item))), N'') AS ItemId
+    FROM dbo.Bravo_LenhSanXuat_Detail_PO AS productionOrder
+    WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), productionOrder.ProductCode))) =
+          LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode)))
+      AND LTRIM(RTRIM(CONVERT(nvarchar(255), productionOrder.PO))) =
+          LTRIM(RTRIM(CONVERT(nvarchar(255), mp.PO)))
+      AND LTRIM(RTRIM(CONVERT(nvarchar(255), productionOrder.SizeCode))) =
+          LTRIM(RTRIM(CONVERT(nvarchar(255), tc.TenSize)))
+      AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(200), productionOrder.Size_Item))), N'') IS NOT NULL
+    ORDER BY productionOrder.Id DESC
+) AS productionItem
 LEFT JOIN dbo.Cutting_PhieuDieuTietGiacSoDo_ChiTiet_BanMay AS bm
     ON CONVERT(nvarchar(100), bm.IdBanMay) =
        CONVERT(nvarchar(100), tc.IdBanMay)
@@ -239,38 +252,48 @@ OUTER APPLY (
     SELECT
         JSON_QUERY((
             SELECT
-                receipt.MasterId AS DetailId,
-                ROW_NUMBER() OVER (ORDER BY receipt.DocNo) AS DetailNo,
-                CAST(NULL AS datetime2) AS DetailDate,
-                CONCAT(N'Mã phiếu: ', receipt.DocNo) AS DetailContent,
-                CONCAT(N'/api/traceability/print/rm-receipt?id=', receipt.MasterId) AS DetailLink,
+                receipt.PGDId AS DetailId,
+                ROW_NUMBER() OVER (ORDER BY receipt.NgayGiamDinh, receipt.MaPhieu) AS DetailNo,
+                receipt.NgayGiamDinh AS DetailDate,
+                CONCAT(N'Mã phiếu: ', receipt.MaPhieu) AS DetailContent,
+                CONCAT(N'/api/traceability/print/rm-receipt?id=', receipt.PGDId) AS DetailLink,
                 receipt.Department
             FROM (
                 SELECT DISTINCT
-                    master.Id AS MasterId,
-                    LTRIM(RTRIM(CONVERT(nvarchar(255), master.DocNo))) AS DocNo,
-                    CASE master.DocCode
-                        WHEN N'NK' THEN N'Nguyên liệu'
-                        WHEN N'NM' THEN N'Phụ liệu'
+                    receiptInspection.PGDId,
+                    LTRIM(RTRIM(CONVERT(nvarchar(255), receiptInspection.MaPhieu))) AS MaPhieu,
+                    receiptInspection.NgayGiamDinh,
+                    CASE LOWER(LTRIM(RTRIM(CONVERT(nvarchar(20), receiptInspection.LoaiGiamDinh))))
+                        WHEN N'nl' THEN N'Nguyên liệu'
+                        WHEN N'pl' THEN N'Phụ liệu'
                     END AS Department
-                FROM dbo.Bravo_BCD_Detail_PO AS balancePO
-                INNER JOIN dbo.Bravo_BCD_Detail AS balance
-                    ON balance.Id = balancePO.IdDetail
-                INNER JOIN dbo.Bravo_PNK_Detail AS detail
-                    ON LTRIM(RTRIM(CONVERT(nvarchar(255), detail.BalanceNo))) =
-                       LTRIM(RTRIM(CONVERT(nvarchar(255), balance.DocNo)))
-                INNER JOIN dbo.Bravo_PNK_Master AS master
-                    ON detail.PNKMasterId = master.Id
-                WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), balancePO.PO))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.PO)))
-                  AND LTRIM(RTRIM(CONVERT(nvarchar(255), balancePO.ProductCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode)))
-                  AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), master.DocNo))), N'') IS NOT NULL
-                  AND master.DocCode IN (N'NK', N'NM')
-                  AND master.DocStatus = 4
+                FROM dbo.WH_ChiTietPhieuGiamDinh_Cay AS receiptTree
+                INNER JOIN dbo.WH_ChiTietPhieuGiamDinh AS receiptDetail
+                    ON receiptDetail.CTPGDId = receiptTree.CTPGDId
+                INNER JOIN dbo.WH_PhieuGiamDinh AS receiptInspection
+                    ON receiptInspection.PGDId = receiptDetail.PGDId
+                WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), receiptTree.MaCay))) =
+                      LTRIM(RTRIM(CONVERT(nvarchar(255), tc.MaCay)))
+                  AND LOWER(LTRIM(RTRIM(CONVERT(nvarchar(20), receiptInspection.LoaiGiamDinh)))) IN (N'nl', N'pl')
+                  AND ISNULL(UPPER(LTRIM(RTRIM(CONVERT(nvarchar(50), receiptInspection.TrangThai)))), N'') <> N'HUY'
+                  AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), receiptInspection.MaPhieu))), N'') IS NOT NULL
             ) AS receipt
-            ORDER BY receipt.Department, receipt.DocNo
+            ORDER BY receipt.Department, receipt.NgayGiamDinh, receipt.MaPhieu
             FOR JSON PATH
         )) AS DetailsJson
 ) AS receiptNotes
+OUTER APPLY (
+    SELECT TOP (1) receiptInspection.DHId
+    FROM dbo.WH_ChiTietPhieuGiamDinh_Cay AS receiptTree
+    INNER JOIN dbo.WH_ChiTietPhieuGiamDinh AS receiptDetail
+        ON receiptDetail.CTPGDId = receiptTree.CTPGDId
+    INNER JOIN dbo.WH_PhieuGiamDinh AS receiptInspection
+        ON receiptInspection.PGDId = receiptDetail.PGDId
+    WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), receiptTree.MaCay))) =
+          LTRIM(RTRIM(CONVERT(nvarchar(255), tc.MaCay)))
+      AND receiptInspection.DHId IS NOT NULL
+    ORDER BY receiptInspection.NgayGiamDinh DESC, receiptInspection.PGDId DESC
+) AS receiptBatch
 OUTER APPLY (
     SELECT
         MAX(inspectionRows.NgayGiamDinh) AS StepDate,
@@ -284,53 +307,43 @@ OUTER APPLY (
                 ) AS DetailNo,
                 inspection.NgayGiamDinh AS DetailDate,
                 CONCAT(N'Mã phiếu: ', inspection.MaPhieu) AS DetailContent,
-                CONCAT(N'/api/traceability/print/rm-inspection?id=', inspection.MaPhieu) AS DetailLink,
+                CONCAT(N'/api/traceability/print/rm-inspection?id=', inspection.PKVId) AS DetailLink,
                 inspection.Department
             FROM (
                 SELECT DISTINCT
-                    LTRIM(RTRIM(CONVERT(nvarchar(255), inspectionRow.MaPhieu))) AS MaPhieu,
-                    inspectionRow.NgayGiamDinh,
-                    CASE LOWER(LTRIM(RTRIM(CONVERT(nvarchar(20), inspectionRow.LoaiGiamDinh))))
-                        WHEN N'nl' THEN N'Nguyên liệu'
-                        WHEN N'pl' THEN N'Phụ liệu'
-                    END AS Department
-                FROM dbo.Bravo_PNK_Detail AS detail
-                INNER JOIN dbo.Bravo_PNK_Master AS master
-                    ON detail.PNKMasterId = master.ReceiptNotesId
-                INNER JOIN dbo.WH_PhieuGiamDinh AS inspectionRow
-                    ON inspectionRow.ReceiptNotesId = master.ReceiptNotesId
-                WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), detail.CustomerCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), customer.CustomerCode)))
-                  AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.SizeCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), tc.TenSize)))
-                  AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode)))
-                  AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductionOrderNo))) = LTRIM(RTRIM(CONVERT(nvarchar(255), COALESCE(tc.LenhSanXuat, cap.LenhSanXuat))))
-                  AND master.DocCode IN (N'NK', N'NM')
-                  AND master.DocStatus = 4
-                  AND LOWER(LTRIM(RTRIM(CONVERT(nvarchar(20), inspectionRow.LoaiGiamDinh)))) IN (N'nl', N'pl')
+                    inspectionRow.PKVId,
+                    LTRIM(RTRIM(CONVERT(nvarchar(255), inspectionRow.SoPhieuKiem))) AS MaPhieu,
+                    inspectionRow.NgayKiemVai AS NgayGiamDinh,
+                    N'Nguyên liệu' AS Department
+                FROM dbo.QM_PhieuKiemVai_CayVai AS inspectionTree
+                INNER JOIN dbo.QM_PhieuKiemVai AS inspectionRow
+                    ON inspectionRow.PKVId = inspectionTree.PKVId
+                WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), inspectionTree.Lot))) =
+                      LTRIM(RTRIM(CONVERT(nvarchar(255), tc.Lot)))
+                  AND LTRIM(RTRIM(CONVERT(nvarchar(255), inspectionRow.LOT))) =
+                      LTRIM(RTRIM(CONVERT(nvarchar(255), tc.Lot)))
+                  AND (receiptBatch.DHId IS NULL OR inspectionRow.DHId = receiptBatch.DHId)
                   AND ISNULL(UPPER(LTRIM(RTRIM(CONVERT(nvarchar(50), inspectionRow.TrangThai)))), N'') <> N'HUY'
-                  AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), inspectionRow.MaPhieu))), N'') IS NOT NULL
+                  AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), inspectionRow.SoPhieuKiem))), N'') IS NOT NULL
             ) AS inspection
             ORDER BY inspection.Department, inspection.NgayGiamDinh, inspection.MaPhieu
             FOR JSON PATH
         )) AS DetailsJson
     FROM (
         SELECT DISTINCT
-            LTRIM(RTRIM(CONVERT(nvarchar(255), inspectionRow.MaPhieu))) AS MaPhieu,
-            inspectionRow.NgayGiamDinh,
-            LOWER(LTRIM(RTRIM(CONVERT(nvarchar(20), inspectionRow.LoaiGiamDinh)))) AS LoaiGiamDinh
-        FROM dbo.Bravo_PNK_Detail AS detail
-        INNER JOIN dbo.Bravo_PNK_Master AS master
-            ON detail.PNKMasterId = master.ReceiptNotesId
-        INNER JOIN dbo.WH_PhieuGiamDinh AS inspectionRow
-            ON inspectionRow.ReceiptNotesId = master.ReceiptNotesId
-        WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), detail.CustomerCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), customer.CustomerCode)))
-          AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.SizeCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), tc.TenSize)))
-          AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductCode))) = LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode)))
-          AND LTRIM(RTRIM(CONVERT(nvarchar(255), detail.ProductionOrderNo))) = LTRIM(RTRIM(CONVERT(nvarchar(255), COALESCE(tc.LenhSanXuat, cap.LenhSanXuat))))
-          AND master.DocCode IN (N'NK', N'NM')
-          AND master.DocStatus = 4
-          AND LOWER(LTRIM(RTRIM(CONVERT(nvarchar(20), inspectionRow.LoaiGiamDinh)))) IN (N'nl', N'pl')
+            inspectionRow.PKVId,
+            LTRIM(RTRIM(CONVERT(nvarchar(255), inspectionRow.SoPhieuKiem))) AS MaPhieu,
+            inspectionRow.NgayKiemVai AS NgayGiamDinh
+        FROM dbo.QM_PhieuKiemVai_CayVai AS inspectionTree
+        INNER JOIN dbo.QM_PhieuKiemVai AS inspectionRow
+            ON inspectionRow.PKVId = inspectionTree.PKVId
+        WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), inspectionTree.Lot))) =
+              LTRIM(RTRIM(CONVERT(nvarchar(255), tc.Lot)))
+          AND LTRIM(RTRIM(CONVERT(nvarchar(255), inspectionRow.LOT))) =
+              LTRIM(RTRIM(CONVERT(nvarchar(255), tc.Lot)))
+          AND (receiptBatch.DHId IS NULL OR inspectionRow.DHId = receiptBatch.DHId)
           AND ISNULL(UPPER(LTRIM(RTRIM(CONVERT(nvarchar(50), inspectionRow.TrangThai)))), N'') <> N'HUY'
-          AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), inspectionRow.MaPhieu))), N'') IS NOT NULL
+          AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), inspectionRow.SoPhieuKiem))), N'') IS NOT NULL
     ) AS inspectionRows
 ) AS materialInspections
 OUTER APPLY (

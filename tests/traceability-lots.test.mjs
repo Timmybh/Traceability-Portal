@@ -32,6 +32,12 @@ test("SQLQUERY uses tracking tables and SQLQUERY_NEW uses the cutting mapping ch
   assert.doesNotMatch(sqlQuery, /CUTTING_PhieuCapBTP|LotVaiChinh|LotVaiPhoi/);
   assert.match(sqlQueryNew, /CUTTING_TemBarcode_TachCay_RFID_Mapping/);
   assert.match(sqlQueryNew, /tc\.Code\s*=\s*mp\.BarcodeTachCay/);
+  assert.match(sqlQueryNew, /Bravo_LenhSanXuat_Detail_PO AS productionOrder/);
+  assert.match(sqlQueryNew, /productionOrder\.ProductCode/);
+  assert.match(sqlQueryNew, /productionOrder\.PO/);
+  assert.match(sqlQueryNew, /productionOrder\.SizeCode/);
+  assert.match(sqlQueryNew, /productionOrder\.Size_Item/);
+  assert.match(sqlQueryNew, /productionItem\.ItemId/);
   assert.match(sqlQueryNew, /d\.SoPhieuCapBTP\s*=\s*cap\.SoPhieuCapBTP/);
   assert.match(sqlQueryNew, /d\.IdCapBTPCT\s*=\s*cap\.IdCapBTPCT/);
   assert.match(sqlQueryNew, /mainFabric\.LotVaiChinh/);
@@ -69,47 +75,38 @@ test("SQLQUERY uses tracking tables and SQLQUERY_NEW uses the cutting mapping ch
   assert.match(sqlQueryNew, /detail\.SizeCode/);
   assert.match(sqlQueryNew, /detail\.ProductCode/);
   assert.match(sqlQueryNew, /detail\.ProductionOrderNo/);
-  assert.match(sqlQueryNew, /INNER JOIN dbo\.Bravo_PNK_Master AS master\s+ON detail\.PNKMasterId = master\.Id/);
-  assert.match(sqlQueryNew, /master\.DocNo/);
-  assert.match(sqlQueryNew, /master\.DocCode IN \(N'NK', N'NM'\)/);
-  assert.match(sqlQueryNew, /master\.DocStatus = 4/);
-  const receiptEnd = sqlQueryNew.indexOf(") AS receiptNotes");
-  const receiptCondition = sqlQueryNew.slice(
-    sqlQueryNew.lastIndexOf("FROM dbo.Bravo_BCD_Detail_PO AS balancePO", receiptEnd),
-    receiptEnd,
-  );
-  assert.match(receiptCondition, /Bravo_PNK_Detail AS detail/);
+  const receiptStart = sqlQueryNew.indexOf("FROM dbo.WH_ChiTietPhieuGiamDinh_Cay AS receiptTree");
+  const receiptEnd = sqlQueryNew.indexOf(") AS receiptNotes", receiptStart);
+  const receiptCondition = sqlQueryNew.slice(receiptStart, receiptEnd);
+  assert.match(receiptCondition, /WH_ChiTietPhieuGiamDinh_Cay AS receiptTree/);
+  assert.match(receiptCondition, /WH_ChiTietPhieuGiamDinh AS receiptDetail/);
+  assert.match(receiptCondition, /WH_PhieuGiamDinh AS receiptInspection/);
+  assert.match(receiptCondition, /receiptDetail\.CTPGDId = receiptTree\.CTPGDId/);
+  assert.match(receiptCondition, /receiptInspection\.PGDId = receiptDetail\.PGDId/);
+  assert.match(receiptCondition, /receiptTree\.MaCay/);
+  assert.match(receiptCondition, /tc\.MaCay/);
+  assert.match(receiptCondition, /receiptInspection\.MaPhieu/);
+  assert.match(receiptCondition, /receiptInspection\.LoaiGiamDinh/);
+  assert.match(receiptCondition, /receipt\.NgayGiamDinh/);
+  assert.doesNotMatch(receiptCondition, /Bravo_PNK_Master/);
+  assert.doesNotMatch(receiptCondition, /Bravo_PNK_Detail/);
   assert.doesNotMatch(receiptCondition, /Bravo_PNK_Detail_DonHang/);
-  assert.doesNotMatch(receiptCondition, /detail\.CustomerCode/);
-  assert.doesNotMatch(receiptCondition, /master\.CustomerCode/);
-  assert.match(receiptCondition, /Bravo_BCD_Detail_PO AS balancePO/);
-  assert.match(receiptCondition, /balance\.Id = balancePO\.IdDetail/);
-  assert.match(receiptCondition, /Bravo_BCD_Detail AS balance/);
-  assert.match(receiptCondition, /detail\.BalanceNo/);
-  assert.match(receiptCondition, /balance\.DocNo/);
-  assert.match(receiptCondition, /balancePO\.PO/);
-  assert.match(receiptCondition, /balancePO\.ProductCode/);
-  assert.doesNotMatch(receiptCondition, /balancePO\.SeasonCode/);
-  assert.doesNotMatch(receiptCondition, /balance\.ProductCode/);
-  assert.doesNotMatch(receiptCondition, /balance\.SeasonCode/);
-  assert.doesNotMatch(receiptCondition, /detail\.SizeCode/);
-  assert.doesNotMatch(receiptCondition, /detail\.ProductionOrderNo/);
-  assert.match(sqlQueryNew, /WHEN N'NK' THEN N'Nguyên liệu'/);
-  assert.match(sqlQueryNew, /WHEN N'NM' THEN N'Phụ liệu'/);
   assert.match(sqlQueryNew, /2, N'Số invoice', N'Invoice Number'/);
   assert.match(sqlQueryNew, /3, N'Nhập kho NPL', N'RM Inbound'/);
-  assert.match(sqlQueryNew, /WH_PhieuGiamDinh AS inspectionRow/);
-  assert.match(sqlQueryNew, /inspectionRow\.ReceiptNotesId = master\.ReceiptNotesId/);
-  assert.match(sqlQueryNew, /inspectionRow\.LoaiGiamDinh/);
-  assert.match(sqlQueryNew, /inspectionRow\.MaPhieu/);
-  assert.match(sqlQueryNew, /inspectionRow\.NgayGiamDinh/);
+  assert.match(sqlQueryNew, /QM_PhieuKiemVai AS inspectionRow/);
+  assert.match(sqlQueryNew, /QM_PhieuKiemVai_CayVai AS inspectionTree/);
+  assert.match(sqlQueryNew, /inspectionRow\.PKVId = inspectionTree\.PKVId/);
+  assert.match(sqlQueryNew, /inspectionTree\.Lot/);
+  assert.match(sqlQueryNew, /inspectionRow\.LOT/);
+  assert.match(sqlQueryNew, /inspectionRow\.Item/);
+  assert.match(sqlQueryNew, /mp\.ProductCode/);
+  assert.match(sqlQueryNew, /inspectionRow\.SoPhieuKiem/);
+  assert.match(sqlQueryNew, /inspectionRow\.NgayKiemVai/);
   assert.equal(
     (sqlQueryNew.match(/inspectionRow\.TrangThai\)\)\)\), N''\) <> N'HUY'/g) || []).length,
     2,
     "cancelled inspections must be excluded from both details and summary",
   );
-  assert.match(sqlQueryNew, /WHEN N'nl' THEN N'Nguyên liệu'/);
-  assert.match(sqlQueryNew, /WHEN N'pl' THEN N'Phụ liệu'/);
   assert.match(sqlQueryNew, /4, N'Kiểm NPL', N'RM Inspection'/);
   assert.match(sqlQueryNew, /WH_PhieuSoanHang AS outboundRow/);
   assert.match(sqlQueryNew, /outboundRow\.ReceiptNotesId = master\.ReceiptNotesId/);

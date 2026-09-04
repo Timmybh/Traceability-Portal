@@ -34,7 +34,13 @@ Tab RFID hiện tại lấy URL mặt trước/mặt sau từ `Tracking_RFID_Mas
 
 Tab RFID mới dùng cùng cơ chế: URL ảnh được lấy từ `Tracking_RFID_Master_Image` ngay trong `SQLQUERY_NEW`, với điều kiện `image.RFID = mp.RFID`. Không cần cấu hình `SQLQUERY_IMAGE` hoặc `SQLQUERY_IMAGE_NEW` trong `.env`.
 
-Công đoạn 03 “Nhập kho NPL” đi theo chuỗi khóa nghiệp vụ: RFID lấy PO và mã hàng từ `CUTTING_TemBarcode_TachCay_RFID_Mapping`; truyền PO cùng `ProductCode` vào `Bravo_BCD_Detail_PO` để lấy `IdDetail`; `IdDetail` nối `Bravo_BCD_Detail.Id` để lấy `DocNo`; cuối cùng `DocNo` nối `Bravo_PNK_Detail.BalanceNo` và `PNKMasterId` nối `Bravo_PNK_Master.Id` để lấy phiếu nhập. Link xem phiếu dùng `Bravo_PNK_Master.Id`. Mùa không tham gia điều kiện tìm phiếu nhập.
+Item/Item Code của tab RFID mới lấy từ `Bravo_LenhSanXuat_Detail_PO.Size_Item`, khớp đồng thời `ProductCode`, `PO` và `SizeCode` với mã hàng, PO và size của `CUTTING_TemBarcode_TachCay`.
+
+Công đoạn 03 “Nhập kho NPL” đi theo cây vải: `CUTTING_TemBarcode_TachCay_RFID_Mapping.BarcodeTachCay` nối `CUTTING_TemBarcode_TachCay.Code`; `CUTTING_TemBarcode_TachCay.MaCay` nối `WH_ChiTietPhieuGiamDinh_Cay.MaCay`; sau đó lần lượt nối `CTPGDId` sang `WH_ChiTietPhieuGiamDinh` và `PGDId` sang `WH_PhieuGiamDinh`. Danh sách phiếu và mẫu in chỉ dùng các bảng `WH_*`; các dòng vật tư trên mẫu in lấy trực tiếp `TenNPL`, `MaNPL` và số lượng từ `WH_ChiTietPhieuGiamDinh`, không còn phụ thuộc `Bravo_PNK_*`.
+
+Công đoạn 04 “Kiểm NPL” dùng `QM_PhieuKiemVai` và `QM_PhieuKiemVai_CayVai`, khớp theo LOT của cây vải (`QM_PhieuKiemVai_CayVai.Lot` và `QM_PhieuKiemVai.LOT` đều so với `tc.Lot`). Không đối chiếu `QM_PhieuKiemVai.Item` với `mp.ProductCode`: `Item` ở đây là mã nguyên liệu vải (ví dụ `5059786`), khác domain với mã hàng thành phẩm, so sánh hai cột này sẽ không bao giờ khớp và khiến bước Kiểm NPL luôn trống. Khóa `PKVId` nối phiếu kiểm với cây vải; `QM_PhieuKiemVai_Cay_ChiTiet.CTId` nối tới `QM_PhieuKiemVai_CayVai.CTId` để lấy chi tiết lỗi.
+
+LOT là chuỗi tự do và có thể trùng giữa các đợt nhận hàng/nhà cung cấp khác nhau (đã kiểm chứng trên dữ liệu thật, ví dụ LOT `1-1` trùng giữa nhiều nhà cung cấp). Vì vậy công đoạn 04 khớp thêm `DHId` (đợt hàng), lấy qua cây vải theo cùng đường dẫn công đoạn 03: `tc.MaCay` → `WH_ChiTietPhieuGiamDinh_Cay.MaCay` → `CTPGDId` → `WH_ChiTietPhieuGiamDinh` → `PGDId` → `WH_PhieuGiamDinh.DHId`. Chỉ giữ phiếu kiểm có `QM_PhieuKiemVai.DHId` trùng đúng đợt hàng đó; nếu cây vải chưa có phiếu nhập kho ghi nhận (`DHId` rỗng) thì mới rơi về khớp theo LOT như cũ. Luồng này không còn phụ thuộc `Bravo_PNK_*`.
 
 ```dotenv
 HOSTFILE=10.8.0.72:9231

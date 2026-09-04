@@ -44,14 +44,14 @@ SELECT
         SELECT TOP (1) image.URL
         FROM dbo.Tracking_RFID_Master_Image AS image
         WHERE image.RFID = mp.RFID
-          AND UPPER(RIGHT(RTRIM(image.URL), 6)) = N'MT.JPG'
+          AND (UPPER(RTRIM(image.URL)) LIKE N'%MT.JPG' OR UPPER(RTRIM(image.URL)) LIKE N'%MT(%).JPG')
         ORDER BY image.Id DESC
     ) AS URLFrontImage,
     (
         SELECT TOP (1) image.URL
         FROM dbo.Tracking_RFID_Master_Image AS image
         WHERE image.RFID = mp.RFID
-          AND UPPER(RIGHT(RTRIM(image.URL), 6)) = N'MS.JPG'
+          AND (UPPER(RTRIM(image.URL)) LIKE N'%MS.JPG' OR UPPER(RTRIM(image.URL)) LIKE N'%MS(%).JPG')
         ORDER BY image.Id DESC
     ) AS URLBackImage,
     COALESCE(traceabilityTimeline.TimelineJson, JSON_QUERY(N'[]')) AS TimelineJson

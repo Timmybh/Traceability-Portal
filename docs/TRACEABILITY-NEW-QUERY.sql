@@ -307,11 +307,14 @@ OUTER APPLY (
                 ) AS DetailNo,
                 inspection.NgayGiamDinh AS DetailDate,
                 CONCAT(N'Mã phiếu: ', inspection.MaPhieu) AS DetailContent,
-                CONCAT(N'/api/traceability/print/rm-inspection?id=', inspection.PKVId) AS DetailLink,
+                CASE inspection.Department
+                    WHEN N'Nguyên liệu' THEN CONCAT(N'/api/traceability/print/rm-inspection?id=', inspection.DocId)
+                    ELSE CONCAT(N'/api/traceability/print/pl-inspection?id=', inspection.DocId)
+                END AS DetailLink,
                 inspection.Department
             FROM (
                 SELECT DISTINCT
-                    inspectionRow.PKVId,
+                    CONVERT(nvarchar(255), inspectionRow.PKVId) AS DocId,
                     LTRIM(RTRIM(CONVERT(nvarchar(255), inspectionRow.SoPhieuKiem))) AS MaPhieu,
                     inspectionRow.NgayKiemVai AS NgayGiamDinh,
                     N'Nguyên liệu' AS Department
@@ -325,13 +328,31 @@ OUTER APPLY (
                   AND (receiptBatch.DHId IS NULL OR inspectionRow.DHId = receiptBatch.DHId)
                   AND ISNULL(UPPER(LTRIM(RTRIM(CONVERT(nvarchar(50), inspectionRow.TrangThai)))), N'') <> N'HUY'
                   AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), inspectionRow.SoPhieuKiem))), N'') IS NOT NULL
+
+                UNION ALL
+
+                SELECT DISTINCT
+                    CONVERT(nvarchar(255), plInspectionRow.PGDId) AS DocId,
+                    LTRIM(RTRIM(CONVERT(nvarchar(255), plInspectionRow.MaPhieu))) AS MaPhieu,
+                    plInspectionRow.NgayGiamDinh,
+                    N'Phụ liệu' AS Department
+                FROM dbo.WH_ChiTietPhieuGiamDinh_Cay AS plInspectionTree
+                INNER JOIN dbo.WH_ChiTietPhieuGiamDinh AS plInspectionDetail
+                    ON plInspectionDetail.CTPGDId = plInspectionTree.CTPGDId
+                INNER JOIN dbo.WH_PhieuGiamDinh AS plInspectionRow
+                    ON plInspectionRow.PGDId = plInspectionDetail.PGDId
+                WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), plInspectionTree.MaCay))) =
+                      LTRIM(RTRIM(CONVERT(nvarchar(255), tc.MaCay)))
+                  AND LOWER(LTRIM(RTRIM(CONVERT(nvarchar(20), plInspectionRow.LoaiGiamDinh)))) = N'pl'
+                  AND ISNULL(UPPER(LTRIM(RTRIM(CONVERT(nvarchar(50), plInspectionRow.TrangThai)))), N'') <> N'HUY'
+                  AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), plInspectionRow.MaPhieu))), N'') IS NOT NULL
             ) AS inspection
             ORDER BY inspection.Department, inspection.NgayGiamDinh, inspection.MaPhieu
             FOR JSON PATH
         )) AS DetailsJson
     FROM (
         SELECT DISTINCT
-            inspectionRow.PKVId,
+            CONVERT(nvarchar(255), inspectionRow.PKVId) AS DocId,
             LTRIM(RTRIM(CONVERT(nvarchar(255), inspectionRow.SoPhieuKiem))) AS MaPhieu,
             inspectionRow.NgayKiemVai AS NgayGiamDinh
         FROM dbo.QM_PhieuKiemVai_CayVai AS inspectionTree
@@ -344,6 +365,23 @@ OUTER APPLY (
           AND (receiptBatch.DHId IS NULL OR inspectionRow.DHId = receiptBatch.DHId)
           AND ISNULL(UPPER(LTRIM(RTRIM(CONVERT(nvarchar(50), inspectionRow.TrangThai)))), N'') <> N'HUY'
           AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), inspectionRow.SoPhieuKiem))), N'') IS NOT NULL
+
+        UNION ALL
+
+        SELECT DISTINCT
+            CONVERT(nvarchar(255), plInspectionRow.PGDId) AS DocId,
+            LTRIM(RTRIM(CONVERT(nvarchar(255), plInspectionRow.MaPhieu))) AS MaPhieu,
+            plInspectionRow.NgayGiamDinh
+        FROM dbo.WH_ChiTietPhieuGiamDinh_Cay AS plInspectionTree
+        INNER JOIN dbo.WH_ChiTietPhieuGiamDinh AS plInspectionDetail
+            ON plInspectionDetail.CTPGDId = plInspectionTree.CTPGDId
+        INNER JOIN dbo.WH_PhieuGiamDinh AS plInspectionRow
+            ON plInspectionRow.PGDId = plInspectionDetail.PGDId
+        WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), plInspectionTree.MaCay))) =
+              LTRIM(RTRIM(CONVERT(nvarchar(255), tc.MaCay)))
+          AND LOWER(LTRIM(RTRIM(CONVERT(nvarchar(20), plInspectionRow.LoaiGiamDinh)))) = N'pl'
+          AND ISNULL(UPPER(LTRIM(RTRIM(CONVERT(nvarchar(50), plInspectionRow.TrangThai)))), N'') <> N'HUY'
+          AND NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), plInspectionRow.MaPhieu))), N'') IS NOT NULL
     ) AS inspectionRows
 ) AS materialInspections
 OUTER APPLY (

@@ -46,6 +46,7 @@ _PRINT_QUERY_TYPES = {
     "invoice": ("02 - Số Invoice", "invoice.sql"),
     "rm-receipt": ("03 - Phiếu nhập kho NPL", "rm-receipt.sql"),
     "rm-inspection": ("04 - Phiếu kiểm NPL", "rm-inspection.sql"),
+    "pl-inspection": ("04 - Phiếu kiểm phụ liệu", "pl-inspection.sql"),
     "rm-outbound": ("05 - Phiếu xuất kho NPL", "rm-outbound.sql"),
     "fabric-relaxing": ("07 - Phiếu xả vải", "fabric-relaxing.sql"),
     "fabric-cutting": ("09 - Phiếu cắt vải", "fabric-cutting.sql"),
@@ -204,6 +205,221 @@ def _receipt_print_html(row: dict) -> str:
 <tbody>{''.join(body_rows) if body_rows else '<tr><td colspan="6" style="text-align:center">Không có chi tiết vật tư</td></tr>'}</tbody>
 <tfoot><tr><td></td><td colspan="3">Tổng cộng:</td><td class="quantity">{total_text(total_document)}</td><td class="quantity">{total_text(total_received)}</td></tr></tfoot></table>
 <section class="signatures"><span>Thủ trưởng đơn vị</span><span>Thủ kho</span><span>Người giao</span><span>Kế toán trưởng</span><span>Người lập phiếu</span></section>
+</main></body></html>"""
+
+
+def _to_yards(meters: float) -> float:
+    return meters * 1.0936133
+
+
+def _fmt_number(value: object, decimals: int = 2) -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return ""
+    return f"{number:,.{decimals}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _fmt_date(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        return datetime.fromisoformat(text).strftime("%d/%m/%Y")
+    except ValueError:
+        return text
+
+
+def _json_list(row: dict, key: str) -> list:
+    value = row.get(key)
+    if isinstance(value, list):
+        return value
+    if not value:
+        return []
+    try:
+        parsed = json.loads(str(value))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _fabric_inspection_print_html(row: dict) -> str:
+    rolls = [item for item in _json_list(row, "InspectionTreesJson") if isinstance(item, dict)]
+    legend = [item for item in _json_list(row, "DefectLegendJson") if isinstance(item, dict)]
+    legend_index = {str(item.get("MaLoi")): index for index, item in enumerate(legend)}
+
+    doc_no = _first_value(row, "DocNo")
+    customer = _first_value(row, "CustomerName")
+    ma_hang = _first_value(row, "MaHang")
+    item_code = _first_value(row, "Item")
+    supplier = _first_value(row, "SupplierName")
+    po = _first_value(row, "CumPO")
+    received_date = _fmt_date(row.get("NgayNhanVai"))
+    inspection_date = _fmt_date(row.get("NgayKiemVai"))
+    roll_count = _first_value(row, "RollCount")
+    inspector = _first_value(row, "NhanVienKiem")
+
+    def qty_text(meters: object) -> str:
+        try:
+            value = float(meters)
+        except (TypeError, ValueError):
+            return ""
+        return f"{_fmt_number(value)} M / {_fmt_number(_to_yards(value))} YDS"
+
+    roll_rows = []
+    for index, roll in enumerate(rolls, start=1):
+        defects = [item for item in _json_list(roll, "DefectsJson") if isinstance(item, dict)]
+        points: list[object] = [None] * 25
+        other_defects = []
+        for defect in defects:
+            code = str(defect.get("MaLoi") or "")
+            total = defect.get("TongDiem") or defect.get("SoDiem") or defect.get("SoLoi")
+            position = legend_index.get(code)
+            if position is not None:
+                points[position] = total
+            else:
+                name = str(defect.get("TenLoi") or code)
+                other_defects.append(f"{name} ({_fmt_number(total, 0)})" if total is not None else name)
+        defect_cells = "".join(
+            f"<td>{escape(_fmt_number(value, 0)) if value is not None else ''}</td>" for value in points
+        )
+        passed = bool(roll.get("KetQuaKiem"))
+        roll_rows.append(
+            "<tr>"
+            f"<td>{index}</td>"
+            f"<td>{escape(_first_value(roll, 'MaMau'))}</td>"
+            f"<td>{escape(_first_value(roll, 'MaCayVai'))}</td>"
+            f"<td>{escape(_first_value(roll, 'Lot'))}</td>"
+            "<td>Mét</td>"
+            f"<td>{escape(_first_value(roll, 'KhoVaiTenTem'))}</td>"
+            f"<td>{escape(_first_value(roll, 'KhoVaiThucTe'))}</td>"
+            f"<td>{escape(_fmt_number(roll.get('SoLuongChungTu')))}</td>"
+            f"<td>{escape(_fmt_number(roll.get('SoLuongThucTe')))}</td>"
+            f"{defect_cells}"
+            f"<td>{escape(_fmt_number(roll.get('DiemTrungBinh')))}</td>"
+            f"<td class='result'>{'X' if passed else ''}</td>"
+            f"<td class='result'>{'' if passed else 'X'}</td>"
+            f"<td>{escape(_first_value(roll, 'HuongXuLy'))}</td>"
+            f"<td>{escape(_first_value(roll, 'GhiChu'))}</td>"
+            "</tr>"
+        )
+        if other_defects:
+            roll_rows.append(
+                "<tr class='note-row'><td colspan='9'></td>"
+                f"<td colspan='30'>Lỗi khác (mã cũ): {escape('; '.join(other_defects))}</td></tr>"
+            )
+
+    legend_items = "".join(
+        f"<div>{index + 1}. {escape(str(item.get('TenLoi') or ''))}</div>" for index, item in enumerate(legend)
+    )
+    defect_headers = "".join(f"<th>{index + 1}</th>" for index in range(25))
+
+    return f"""<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Biên bản kiểm vải {escape(doc_no)}</title><style>
+@page{{size:A4 landscape;margin:8mm}} *{{box-sizing:border-box}} body{{margin:0;color:#111;font:11px Arial,sans-serif}} .sheet{{max-width:1600px;margin:auto}}
+.top{{display:flex;justify-content:space-between;font-weight:700;font-size:11px}} .title{{text-align:center;margin:6px 0}} .title h1{{margin:0;font-size:20px}} .title h2{{margin:2px 0;font-size:13px;font-weight:400}}
+.meta{{display:grid;grid-template-columns:1.3fr 1fr 1.3fr;gap:3px 24px;margin:10px 0;font-size:12px}} .meta div{{display:flex;gap:6px}} .meta b{{min-width:120px}}
+table{{width:100%;border-collapse:collapse;table-layout:fixed;margin-top:6px}} th,td{{border:1px solid #444;padding:2px;text-align:center;font-size:8.5px;vertical-align:middle;word-break:break-word}}
+.result{{width:22px}} .note-row td{{text-align:left;font-style:italic;font-size:9px;border-top:none}}
+.note{{font-size:10px;margin:6px 0}} .legend{{display:grid;grid-template-columns:repeat(5,1fr);gap:2px 10px;font-size:9px;margin:8px 0;border-top:1px solid #ccc;padding-top:6px}}
+.sign{{display:grid;grid-template-columns:1fr 1fr;text-align:center;margin-top:22px;font-size:11px}} .sign .date{{grid-column:2;margin-bottom:4px}}
+.actions{{position:fixed;right:12px;top:12px}} button{{border:0;border-radius:6px;background:#172239;padding:8px 14px;color:#fff;cursor:pointer}} @media print{{.actions{{display:none}}}}
+</style></head><body><div class="actions"><button onclick="window.print()">In phiếu</button></div><main class="sheet">
+<div class="top"><span>CÔNG TY CỔ PHẦN ĐỒNG TIẾN<br>PHÒNG ĐBCL</span><span style="text-align:right">MẪU SỐ: 02SX<br>Ban hành lần: 3/0</span></div>
+<div class="title"><h1>BIÊN BẢN KIỂM VẢI CHI TIẾT</h1><h2>Fabric inspection report — Số: {escape(doc_no)}</h2></div>
+<section class="meta">
+<div><b>Khách hàng:</b><span>{escape(customer)}</span></div>
+<div><b>PO/ Cụm PO:</b><span>{escape(po)}</span></div>
+<div><b>Ngày nhận vải:</b><span>{escape(received_date)}</span></div>
+<div><b>Mã hàng:</b><span>{escape(ma_hang)}</span></div>
+<div><b>Item:</b><span>{escape(item_code)}</span></div>
+<div><b>Ngày kiểm vải:</b><span>{escape(inspection_date)}</span></div>
+<div><b>Nhà cung cấp:</b><span>{escape(supplier)}</span></div>
+<div><b>Số cây:</b><span>{escape(roll_count)}</span></div>
+<div><b>Số lượng nhận:</b><span>{escape(qty_text(row.get('SoLuongNhan')))}</span></div>
+<div></div><div></div>
+<div><b>Số lượng kiểm:</b><span>{escape(qty_text(row.get('SoLuongKiem')))}</span></div>
+</section>
+<table><thead>
+<tr><th rowspan="2">STT</th><th rowspan="2">Tên màu vải</th><th rowspan="2">Số roll</th><th rowspan="2">Lot</th><th rowspan="2">ĐVT</th>
+<th colspan="2">Khổ vải (cm)</th><th colspan="2">Số lượng (m)</th><th colspan="25">Số lỗi vải</th><th rowspan="2">Điểm TB/<br>100yds²</th>
+<th colspan="2">Kết quả</th><th rowspan="2">Hướng xử lý</th><th rowspan="2">Ghi chú</th></tr>
+<tr><th>Tem</th><th>T.tế</th><th>Tem</th><th>T.tế</th>{defect_headers}<th>Đạt</th><th>K.đạt</th></tr>
+</thead><tbody>{''.join(roll_rows) if roll_rows else '<tr><td colspan="39">Không có dữ liệu cây vải</td></tr>'}</tbody></table>
+<p class="note">Ghi chú: Nếu tổng số lỗi dưới 25 điểm/100 yard vuông thì "đạt" và ngược lại thì "không đạt".</p>
+<div class="legend">{legend_items}</div>
+<section class="sign"><div class="date">{escape(inspection_date)}</div><div>MQP nhà máy<br>Inspection Leader</div><div>Người kiểm<br>Inspector<br><b>{escape(inspector)}</b></div></section>
+</main></body></html>"""
+
+
+def _pl_inspection_print_html(row: dict) -> str:
+    details = [item for item in _json_list(row, "DetailsJson") if isinstance(item, dict)]
+
+    doc_no = _first_value(row, "DocNo")
+    customer = _first_value(row, "CustomerName")
+    received_date = _fmt_date(row.get("ReceivedDate"))
+    check_date = _fmt_date(row.get("DocDate"))
+
+    body_rows = []
+    for index, detail in enumerate(details, start=1):
+        defects = [item for item in _json_list(detail, "DefectsJson") if isinstance(item, dict)]
+        defect_qty = sum(float(d.get("SoLuongLoi") or 0) for d in defects)
+        defect_names = "; ".join(
+            f"{escape(str(d.get('DefectName') or d.get('MaLoi') or ''))} ({_fmt_number(d.get('SoLuongLoi'), 0)})"
+            for d in defects
+        )
+        try:
+            checked = float(detail.get("SLKiem") or 0)
+        except (TypeError, ValueError):
+            checked = 0.0
+        rate = f"{defect_qty / checked * 100:.1f}%" if checked else ""
+        result = "KHÔNG ĐẠT" if defect_qty > 0 else "ĐẠT"
+        body_rows.append(
+            "<tr>"
+            f"<td>{index}</td>"
+            f"<td>{escape(_first_value(detail, 'NgayNhan'))}</td>"
+            f"<td>{escape(_first_value(detail, 'TenNPL', 'ItemName'))}</td>"
+            f"<td>{escape(_first_value(detail, 'StyleCode'))}</td>"
+            f"<td>{escape(_first_value(detail, 'ChungTu'))}</td>"
+            f"<td>{escape(_first_value(detail, 'ItemCode', 'MaNPL'))}</td>"
+            f"<td>{escape(_first_value(detail, 'SupplierName'))}</td>"
+            f"<td>{escape(_first_value(detail, 'ColorCodeB'))}</td>"
+            f"<td>{escape(_first_value(detail, 'UnitCodeB'))}</td>"
+            f"<td>{escape(_fmt_number(detail.get('DocumentQuantity')))}</td>"
+            f"<td>{escape(_fmt_number(detail.get('ReceivedQuantity')))}</td>"
+            f"<td>{escape(_fmt_number(detail.get('SLKiem'), 0))}</td>"
+            f"<td>{escape(_fmt_number(defect_qty, 0)) if defect_qty else ''}</td>"
+            f"<td>{escape(rate)}</td>"
+            f"<td>{escape(result)}</td>"
+            f"<td>{defect_names}</td>"
+            f"<td>{escape(_first_value(detail, 'HuongXuLy'))}</td>"
+            f"<td>{escape(_first_value(detail, 'AnhMauPL'))}</td>"
+            f"<td>{escape(_first_value(detail, 'GhiChu'))}</td>"
+            "</tr>"
+        )
+
+    return f"""<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Báo cáo kiểm phụ liệu {escape(doc_no)}</title><style>
+@page{{size:A4 landscape;margin:8mm}} *{{box-sizing:border-box}} body{{margin:0;color:#111;font:11px Arial,sans-serif}} .sheet{{max-width:1500px;margin:auto}}
+.top{{display:flex;justify-content:space-between;font-weight:700;font-size:11px}} .title{{text-align:center;margin:6px 0}} .title h1{{margin:0;font-size:16px}} .title h2{{margin:2px 0;font-size:10px;font-weight:400}}
+.meta{{display:flex;justify-content:space-between;font-size:11px;margin:8px 0}} .meta b{{margin-right:6px}}
+table{{width:100%;border-collapse:collapse;table-layout:fixed;margin-top:6px}} th,td{{border:1px solid #444;padding:3px;text-align:center;font-size:9px;vertical-align:middle;word-break:break-word}}
+.sign{{display:flex;justify-content:flex-end;text-align:center;margin-top:26px;font-size:11px}} .sign div{{width:160px}}
+.actions{{position:fixed;right:12px;top:12px}} button{{border:0;border-radius:6px;background:#172239;padding:8px 14px;color:#fff;cursor:pointer}} @media print{{.actions{{display:none}}}}
+</style></head><body><div class="actions"><button onclick="window.print()">In phiếu</button></div><main class="sheet">
+<div class="top"><span>CÔNG TY CỔ PHẦN ĐỒNG TIẾN<br>ĐƠN VỊ: KHO NPL</span><span style="text-align:right">MẪU SỐ: QA 02<br>Ban hành lần: 3/0</span></div>
+<div class="title"><h1>BÁO CÁO GIÁM ĐỊNH KIỂM TRA CHẤT LƯỢNG PHỤ LIỆU</h1><h2>Accessory inspection report</h2></div>
+<section class="meta">
+<div><b>Số PGD:</b>{escape(doc_no)} &nbsp; <b>Từ ngày:</b>{escape(received_date)} &nbsp; <b>Đến ngày:</b>{escape(check_date)}</div>
+<div><b>Khách hàng:</b>{escape(customer)}</div>
+</section>
+<table><thead><tr>
+<th>STT</th><th>Ngày nhận</th><th>Tên vật tư</th><th>Mã hàng</th><th>Chứng từ</th><th>Item</th><th>Nhà cung cấp</th><th>Màu</th><th>ĐVT</th>
+<th>SL Packing List</th><th>SL Thực tế</th><th>SL Kiểm</th><th>SL Ko đạt</th><th>Tỉ lệ lỗi</th><th>Kết quả</th><th>Loại lỗi phụ liệu</th><th>Hướng xử lý</th><th>Ánh màu</th><th>Ghi chú</th>
+</tr></thead><tbody>{''.join(body_rows) if body_rows else '<tr><td colspan="19">Không có dữ liệu chi tiết</td></tr>'}</tbody></table>
+<section class="sign"><div>{escape(check_date)}<br>Người thực hiện</div></section>
 </main></body></html>"""
 
 
@@ -529,7 +745,14 @@ def print_traceability_document(
         raise _database_error(exc) from exc
     if not rows:
         raise HTTPException(status_code=404, detail="Không tìm thấy dữ liệu chi tiết phiếu")
-    html = _receipt_print_html(rows[0]) if document_type == "rm-receipt" else _temporary_print_html(title, value, rows)
+    if document_type == "rm-receipt":
+        html = _receipt_print_html(rows[0])
+    elif document_type == "rm-inspection":
+        html = _fabric_inspection_print_html(rows[0])
+    elif document_type == "pl-inspection":
+        html = _pl_inspection_print_html(rows[0])
+    else:
+        html = _temporary_print_html(title, value, rows)
     return HTMLResponse(html)
 
 

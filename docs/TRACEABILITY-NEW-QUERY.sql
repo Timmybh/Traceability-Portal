@@ -27,7 +27,7 @@ SELECT
     mp.ProductCode,
     productionItem.ItemId,
     NULLIF(LTRIM(RTRIM(tc.TenSize)), N'') AS Size,
-    CAST(NULL AS nvarchar(500)) AS Art,
+    artInfo.Art,
     cap.TenMau AS Color,
     NULLIF(REPLACE(LTRIM(RTRIM(COALESCE(tc.Mua, cap.SeasonCode))), N';', N''), N'') AS Season,
     COALESCE(NULLIF(LTRIM(RTRIM(cap.TenXiNghiep)), N''), NULLIF(LTRIM(RTRIM(cap.TenPhanXuong)), N'')) AS XiNghiep,
@@ -57,6 +57,13 @@ SELECT
 FROM MappingRow AS mp
 INNER JOIN dbo.CUTTING_TemBarcode_TachCay AS tc
     ON tc.Code = mp.BarcodeTachCay
+OUTER APPLY (
+    SELECT TOP (1) NULLIF(LTRIM(RTRIM(art.Name)), N'') AS Art
+    FROM dw.RPT_TONKHOVAI AS stock
+    INNER JOIN dbo.Lib_Art AS art
+        ON art.Code = stock.ArtCode
+    WHERE stock.MaCay = tc.MaCay
+) AS artInfo
 OUTER APPLY (
     SELECT TOP (1)
         NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(200), productionOrder.Size_Item))), N'') AS ItemId

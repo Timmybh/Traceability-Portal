@@ -183,7 +183,7 @@ test("both RFID modes stream tracking images independently from rendered data", 
   assert.doesNotMatch(env, /^SQLQUERY_IMAGE=/m);
   assert.doesNotMatch(env, /^SQLQUERY_IMAGE_NEW=/m);
   assert.match(env, /SQLQUERY=.*Tracking_RFID_Master_Image.*URLFrontImage.*URLBackImage/);
-  assert.match(env, /SQLQUERY_NEW=.*Tracking_RFID_Master_Image.*image\.RFID=mp\.RFID.*URLFrontImage.*URLBackImage/);
+  assert.match(env, /SQLQUERY_NEW=.*Tracking_RFID_Master_Image.*image\.RFID\s*=\s*mp\.RFID.*URLFrontImage.*URLBackImage/);
   assert.match(script, /source=\$\{source\}/);
   assert.match(script, /state\.traceMode === "rfid-new" \? "new" : "legacy"/);
   assert.match(script, /showData\(data\);[\s\S]*loadImages\(/);

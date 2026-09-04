@@ -504,6 +504,72 @@ table{{width:100%;border-collapse:collapse}} th,td{{border:1px solid #333;paddin
 </main></body></html>"""
 
 
+def _fmt_datetime_parts(value: object) -> tuple[str, str]:
+    text = str(value or "").strip()
+    if not text:
+        return "", ""
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return text, ""
+    return parsed.strftime("%d/%m/%Y"), parsed.strftime("%H:%M")
+
+
+def _fabric_relaxing_print_html(row: dict) -> str:
+    doc_no = _first_value(row, "IdPhieuXaVai")
+    customer = _first_value(row, "CustomerName")
+    hours = row.get("ThoiGian")
+    try:
+        hours_value = float(hours) if hours is not None else None
+    except (TypeError, ValueError):
+        hours_value = None
+    is_24 = hours_value == 24
+    is_48 = hours_value == 48
+    is_other = hours_value is not None and not is_24 and not is_48
+
+    def checkbox(checked: bool) -> str:
+        return "☑" if checked else "☐"
+
+    relax_date, relax_time = _fmt_datetime_parts(row.get("ThoiGianXaVai"))
+    spread_date, spread_time = _fmt_datetime_parts(row.get("ThoiGianTraiVai"))
+    relaxing_staff = _first_value(row, "NguoiXaVai")
+    spreading_staff = _first_value(row, "NguoiTraiVai")
+
+    return f"""<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Phiếu xả vải {escape(doc_no)}</title><style>
+@page{{size:A4;margin:10mm}} *{{box-sizing:border-box}} body{{margin:0;color:#111;font:13px Arial,sans-serif}} .sheet{{max-width:820px;margin:auto;border:1px solid #333;padding:16px 22px}}
+.top{{display:flex;justify-content:space-between;font-size:12px}} .top .form-code{{text-align:right}}
+.heading{{text-align:center;margin:8px 0 16px}} .heading h1{{margin:0;font-size:22px;letter-spacing:1px}} .heading small{{font-size:12px}}
+.row{{margin:8px 0;display:flex;gap:6px;align-items:baseline}} .row b{{min-width:0}}
+.checks{{display:flex;gap:20px;margin:10px 0}} .checks span{{display:inline-flex;align-items:center;gap:4px;border:1px solid #333;padding:2px 8px}}
+.two-col{{display:flex;justify-content:space-between}} .two-col > div{{flex:1}}
+.note{{margin-top:16px;font-size:12px}} .note b{{display:block}}
+.sign-grid{{display:flex;justify-content:space-around;margin-top:36px;text-align:center;font-size:12px}} .sign-grid .role{{font-weight:700}} .sign-grid .confirmed{{font-style:italic;margin-top:32px}} .sign-grid .name{{margin-top:4px;font-weight:700}}
+.actions{{position:fixed;right:12px;top:12px}} button{{border:0;border-radius:6px;background:#172239;padding:8px 14px;color:#fff;cursor:pointer}} @media print{{.actions{{display:none}}}}
+</style></head><body><div class="actions"><button onclick="window.print()">In phiếu</button></div><main class="sheet">
+<div class="top"><div>Công ty cổ phần Đồng Tiến (Dong Tien Joint Stock Company)</div><div class="form-code">BM 27 HD 10-02<br>Số lần sửa đổi: 05</div></div>
+<div class="heading"><h1>PHIẾU XẢ VẢI</h1><small>(Fabric relaxing note)</small></div>
+<div class="row"><b>Khách hàng (Customer):</b>&nbsp;{escape(customer)}</div>
+<div class="checks">
+<span>24h: {checkbox(is_24)}</span><span>48h: {checkbox(is_48)}</span><span>Xả trải: {checkbox(False)}</span>
+<span>Khác: {checkbox(is_other)} {escape(_fmt_number(hours_value, 0)) + 'h' if is_other else ''}</span>
+</div>
+<div class="two-col"><div><b>Ngày xả vải (Relaxing date):</b> {escape(relax_date)}</div><div><b>Giờ (Time):</b> {escape(relax_time)}</div></div>
+<div class="two-col"><div><b>Ngày có thể trải/cắt (Spreading/Cutting date able):</b> {escape(spread_date)}</div><div><b>Giờ (Time):</b> {escape(spread_time)}</div></div>
+<div class="two-col"><div><b>Mã cây:</b> {escape(_first_value(row, 'MaCay'))} &nbsp;&nbsp; <b>Màu:</b> {escape(_first_value(row, 'MauVai'))}</div></div>
+<div class="two-col"><div><b>Số cây (Roll):</b> {escape(_first_value(row, 'SoCay_Roll'))}</div><div><b>Yard / Meter:</b> {escape(_fmt_number(row.get('YardQuantity')))} yards / {escape(_fmt_number(row.get('MeterQuantity')))} meter</div></div>
+<div class="two-col"><div><b>Art vải (Fabric Art):</b> {escape(_first_value(row, 'Art'))}</div><div><b>Lot:</b> {escape(_first_value(row, 'Lot'))}</div></div>
+<div class="two-col"><div><b>Khổ cắt (Cuttable width):</b> {escape(_fmt_number(row.get('KhoCat')))}</div><div><b>Ánh màu:</b> {escape(_first_value(row, 'ShadeNo'))}</div></div>
+<div class="note"><b>Ghi chú: Đối với thời gian xả vải khác 24h hay 48h thì phải ghi rõ thời gian xả vào ô "Khác".</b>
+(Note: For the fabric relaxing time which differs from 24h or 48h, needs to be written in "Other" box clearly.)</div>
+<div class="sign-grid">
+<div><div class="role">Nhân viên xả vải<br>(Fabric relaxing staff)</div>{f'<div class="confirmed">Đã xác nhận</div><div class="name">{escape(relaxing_staff)}</div>' if relaxing_staff else ''}</div>
+<div><div class="role">Nhân viên trải vải<br>(Fabric spreading staff)</div>{f'<div class="confirmed">Đã xác nhận</div><div class="name">{escape(spreading_staff)}</div>' if spreading_staff else ''}</div>
+</div>
+</main></body></html>"""
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     settings = get_settings()
@@ -878,6 +944,8 @@ def print_traceability_document(
         html = _pl_inspection_print_html(rows[0])
     elif document_type == "rm-outbound":
         html = _outbound_print_html(rows[0])
+    elif document_type == "fabric-relaxing":
+        html = _fabric_relaxing_print_html(rows[0])
     else:
         html = _temporary_print_html(title, value, rows)
     return HTMLResponse(html)

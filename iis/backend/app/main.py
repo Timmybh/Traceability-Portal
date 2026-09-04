@@ -4,6 +4,7 @@ import base64
 import binascii
 from contextlib import asynccontextmanager
 from datetime import datetime
+from decimal import ROUND_HALF_UP, Decimal
 import json
 import logging
 import mimetypes
@@ -57,6 +58,7 @@ _PRINT_QUERY_TYPES = {
     "wip-issuing": ("12 - Phiếu đặt BTP", "wip-issuing.sql"),
     "wip-outbound": ("13 - Phiếu xuất BTP", "wip-outbound.sql"),
     "wip-scanning": ("15 - Phiếu quét nhận BTP", "wip-scanning.sql"),
+    "endline": ("QC - Báo cáo Endline", "endline.sql"),
 }
 
 
@@ -570,6 +572,734 @@ def _fabric_relaxing_print_html(row: dict) -> str:
 </main></body></html>"""
 
 
+_INSPECTION_POSITIONS = ("T", "G", "D")
+
+
+def _inspection_cell(value: object) -> tuple[str, str]:
+    text = str(value or "").strip()
+    if not text:
+        return "Chưa kiểm", "unchecked"
+    if text.upper() in ("OK", "DAT", "ĐẠT", "PASS"):
+        return "✓", "pass"
+    return text, "defect"
+
+
+def _wip_inspection_print_html(row: dict) -> str:
+    details = [item for item in _json_list(row, "DetailsJson") if isinstance(item, dict)]
+    recheck_details = [item for item in _json_list(row, "RecheckDetailsJson") if isinstance(item, dict)]
+
+    doc_no = _first_value(row, "IdPhieuKiemTra")
+    form_no = _first_value(row, "FormNo") or "BM 02 HD 10-03"
+    revision_no = _first_value(row, "RevisionNo") or "08"
+    inspection_date = _fmt_date(row.get("InspectionDate"))
+    inspector = _first_value(row, "Inspector")
+    qc_leader = _first_value(row, "QcLeader")
+
+    def cell_text(value: object) -> str:
+        return "" if value is None else str(value)
+
+    def summary_row(label: str, groups: list[list[int]], total: object) -> str:
+        g = groups
+        return (
+            "<tr class='summary'>"
+            f"<td colspan='2'>{escape(label)}</td>"
+            f"<td>{cell_text(g[0][0])}</td><td>{cell_text(g[0][1])}</td><td>{cell_text(g[0][2])}</td>"
+            f"<td></td><td>{cell_text(g[1][0])}</td><td>{cell_text(g[1][1])}</td><td>{cell_text(g[1][2])}</td>"
+            f"<td></td><td>{cell_text(g[2][0])}</td><td>{cell_text(g[2][1])}</td><td>{cell_text(g[2][2])}</td>"
+            "<td></td><td></td>"
+            f"<td>{cell_text(g[3][0])}</td><td>{cell_text(g[3][1])}</td><td>{cell_text(g[3][2])}</td>"
+            "<td></td><td></td>"
+            f"<td>{escape(str(total))}</td>"
+            "</tr>"
+        )
+
+    def blank_summary_row(label: str) -> str:
+        return f"<tr class='summary'><td colspan='2'>{escape(label)}</td>{'<td></td>' * 19}</tr>"
+
+    _SUMMARY_LABELS = (
+        "Tổng số chi tiết lỗi",
+        "Tổng số lượng đạt",
+        "Tổng số lượng kiểm",
+        "RFT (Tổng số lượng đạt/Tổng số lượng kiểm*100%)",
+    )
+
+    def render_section(items: list[dict]) -> tuple[str, str]:
+        if not items:
+            body = "<tr>" + "<td></td>" * 21 + "</tr>"
+            summary = "".join(blank_summary_row(label) for label in _SUMMARY_LABELS)
+            return body, summary
+
+        pass_counts = [[0, 0, 0] for _ in range(4)]
+        defect_counts = [[0, 0, 0] for _ in range(4)]
+        body_rows = []
+        for item in items:
+            sheets_raw = item.get("Sheets")
+            sheets = sheets_raw if isinstance(sheets_raw, list) else []
+            sheet_cells = []
+            for group_index in range(3):
+                sheet = sheets[group_index] if group_index < len(sheets) and isinstance(sheets[group_index], dict) else {}
+                size = _first_value(sheet, "Size")
+                position_cells = []
+                for pos_index, pos in enumerate(_INSPECTION_POSITIONS):
+                    text, state = _inspection_cell(sheet.get(pos))
+                    if state == "pass":
+                        pass_counts[group_index][pos_index] += 1
+                    elif state == "defect":
+                        defect_counts[group_index][pos_index] += 1
+                    position_cells.append(f"<td class='chk {state}'>{escape(text)}</td>")
+                sheet_cells.append(f"<td>{escape(size)}</td>{''.join(position_cells)}")
+            recheck_raw = item.get("Recheck")
+            recheck = recheck_raw if isinstance(recheck_raw, dict) else {}
+            recheck_cells = []
+            for pos_index, pos in enumerate(_INSPECTION_POSITIONS):
+                text, state = _inspection_cell(recheck.get(pos))
+                if state == "pass":
+                    pass_counts[3][pos_index] += 1
+                elif state == "defect":
+                    defect_counts[3][pos_index] += 1
+                recheck_cells.append(f"<td class='chk {state}'>{escape(text)}</td>")
+            body_rows.append(
+                "<tr>"
+                f"<td>{escape(_first_value(item, 'PartName', 'ChiTiet'))}</td>"
+                f"{''.join(sheet_cells)}"
+                f"<td>{escape(_first_value(item, 'DefectDescription'))}</td>"
+                f"<td>{escape(_first_value(item, 'QcLeaderConfirm') or qc_leader)}</td>"
+                f"{''.join(recheck_cells)}"
+                f"<td>{escape(_first_value(item, 'RecheckDefectDescription'))}</td>"
+                f"<td>{escape(_first_value(item, 'ReplacementConfirm'))}</td>"
+                "<td></td>"
+                "</tr>"
+            )
+
+        total_pass = sum(sum(group) for group in pass_counts)
+        total_defect = sum(sum(group) for group in defect_counts)
+        total_checked = total_pass + total_defect
+        rft = f"{total_pass / total_checked * 100:.0f}%" if total_checked else ""
+
+        # Lượng kiểm và RFT chỉ có tổng hợp (giống mẫu giấy không tách theo lá kiểm).
+        summary = (
+            summary_row(_SUMMARY_LABELS[0], defect_counts, total_defect)
+            + summary_row(_SUMMARY_LABELS[1], pass_counts, total_pass)
+            + f"<tr class='summary'><td colspan='2'>{escape(_SUMMARY_LABELS[2])}</td>{'<td></td>' * 18}<td>{total_checked}</td></tr>"
+            + f"<tr class='summary'><td colspan='2'>{escape(_SUMMARY_LABELS[3])}</td>{'<td></td>' * 18}<td>{escape(rft)}</td></tr>"
+        )
+        body = "".join(body_rows)
+        return body, summary
+
+    main_body, main_summary = render_section(details)
+    recheck_body, recheck_summary = render_section(recheck_details)
+
+    group_header = "<th>T</th><th>G</th><th>D</th>"
+
+    return f"""<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Phiếu kiểm BTP cắt {escape(doc_no)}</title><style>
+@page{{size:A4 landscape;margin:8mm}} *{{box-sizing:border-box}} body{{margin:0;color:#111;font:11px Arial,sans-serif}} .sheet{{max-width:1500px;margin:auto}}
+.top{{display:flex;justify-content:space-between;font-size:11px}} .top .form-code{{text-align:right}}
+.heading{{text-align:center;margin:6px 0 12px}} .heading h1{{margin:0;font-size:18px}} .heading div{{font-size:13px}}
+.meta{{display:grid;grid-template-columns:repeat(3,1fr);gap:2px 20px;font-size:11px;margin-bottom:8px}} .meta b{{margin-right:4px}}
+table{{width:100%;border-collapse:collapse;table-layout:fixed;margin-top:6px}} th,td{{border:1px solid #444;padding:3px;text-align:center;font-size:9.5px;vertical-align:middle;word-break:break-word}}
+th{{background:#f1f0e8}} tr.summary td{{font-weight:700;text-align:left}} tr.summary td:first-child{{padding-left:6px}}
+td.chk.pass{{color:#0a7a2f;font-weight:700}} td.chk.defect{{color:#c0272d;font-weight:700}} td.chk.unchecked{{color:#888;font-style:italic}}
+.section-title td{{font-style:italic;font-weight:700;background:#ddd;text-align:left;padding:4px 6px}}
+.note{{font-size:10px;margin:8px 0 2px}}
+.sign{{display:flex;justify-content:space-between;margin-top:26px;font-size:11px}} .sign .role{{font-weight:700}} .sign .name{{margin-top:32px;font-weight:700}}
+.actions{{position:fixed;right:12px;top:12px}} button{{border:0;border-radius:6px;background:#172239;padding:8px 14px;color:#fff;cursor:pointer}} @media print{{.actions{{display:none}}}}
+</style></head><body><div class="actions"><button onclick="window.print()">In phiếu</button></div><main class="sheet">
+<div class="top"><div>CÔNG TY CỔ PHẦN ĐỒNG TIẾN<br>DONG TIEN JOINT STOCK COMPANY</div><div class="form-code">{escape(form_no)}<br>Số lần sửa đổi: {escape(revision_no)}</div></div>
+<div class="heading"><h1>PHIẾU KIỂM TRA CHẤT LƯỢNG BÁN THÀNH PHẨM CẮT</h1><div>SEMI-FINISHED PRODUCTS QUALITY INSPECTION REPORT</div></div>
+<section class="meta">
+<div><b>Xí nghiệp (Factory):</b>{escape(_first_value(row, 'Factory'))}</div>
+<div><b>Tổ (Line):</b>{escape(_first_value(row, 'Line'))}</div>
+<div><b>Mã hàng (Style):</b>{escape(_first_value(row, 'Style'))}</div>
+<div><b>Mùa (Season):</b>{escape(_first_value(row, 'Season'))}</div>
+<div><b>Lệnh:</b>{escape(_first_value(row, 'ProductionOrder'))}</div>
+<div></div>
+<div><b>Bàn cắt (Cutting table no):</b>{escape(_first_value(row, 'CuttingTable'))}</div>
+<div><b>Bàn may (Sewing no):</b>{escape(_first_value(row, 'SewingTable'))}</div>
+<div></div>
+<div><b>Số lượng (quantities):</b>{escape(_first_value(row, 'Quantities'))}</div>
+<div><b>Art vải:</b>{escape(_first_value(row, 'FabricArt'))}</div>
+<div><b>Vóc:</b>{escape(_first_value(row, 'Voc'))}</div>
+</section>
+<table><thead>
+<tr>
+<th rowspan="2">Chi tiết</th>
+<th rowspan="2">Size</th><th colspan="3">Lá kiểm</th>
+<th rowspan="2">Size</th><th colspan="3">Lá kiểm</th>
+<th rowspan="2">Size</th><th colspan="3">Lá kiểm</th>
+<th rowspan="2">Mô tả lỗi</th>
+<th rowspan="2">Tổ trưởng ký<br>xác nhận lỗi</th>
+<th colspan="3">Kiểm lần 2</th>
+<th rowspan="2">Mô tả lỗi</th>
+<th rowspan="2">Thay thân<br>xác nhận</th>
+<th rowspan="2">Tổng hợp</th>
+</tr>
+<tr>{group_header}{group_header}{group_header}{group_header}</tr>
+</thead>
+<tbody>{main_body}</tbody>
+<tbody>{main_summary}</tbody>
+<tbody><tr class="section-title"><td colspan="21">Kiểm lại (sau khi thay thân)</td></tr></tbody>
+<tbody>{recheck_body}</tbody>
+<tbody>{recheck_summary}</tbody>
+</table>
+<p class="note">*Ghi chú: Đạt (✓) ; không đạt (Mã lỗi); lá kiểm tiếp của lá không đạt – nếu lá kiểm tiếp không đạt (Mã lỗi).</p>
+<p class="note">Viết tắt: Trên: T, Giữa: G, Dưới: D</p>
+<section class="sign">
+<div><div class="role">Người kiểm (QC)</div><div class="name">{escape(inspector)}</div></div>
+<div style="text-align:right"><div>{escape(inspection_date)}</div><div class="role">Tổ trưởng QC (QC leader)</div><div class="name">{escape(qc_leader)}</div></div>
+</section>
+</main></body></html>"""
+
+
+def _fmt_date_vn_words(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return text
+    return f"Ngày {parsed.day} tháng {parsed.month} năm {parsed.year}"
+
+
+def _wip_issuing_print_html(row: dict) -> str:
+    details = [item for item in _json_list(row, "DetailsJson") if isinstance(item, dict)]
+
+    doc_no = _first_value(row, "SoPhieuCapBTP")
+    form_no = _first_value(row, "FormNo") or "BM 09 HD 10-02"
+    revision_no = _first_value(row, "RevisionNo") or "01"
+    qr_code = _first_value(row, "QrCode") or doc_no
+    receive_date = _fmt_date_vn_words(row.get("ReceiveDate"))
+    request_date = _fmt_date_vn_words(row.get("RequestDate"))
+
+    body_rows = []
+    totals = {"in_line": 0.0, "sewn": 0.0, "remaining": 0.0, "needed": 0.0, "quantity": 0.0}
+
+    def add_total(key: str, value: object) -> float | None:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        totals[key] += number
+        return number
+
+    for detail in details:
+        in_line = add_total("in_line", detail.get("QuantityInLine"))
+        sewn = add_total("sewn", detail.get("QuantitySewn"))
+        remaining = add_total("remaining", detail.get("QuantityRemaining"))
+        needed = add_total("needed", detail.get("QuantityNeeded"))
+        quantity = add_total("quantity", detail.get("Quantity"))
+        color = escape(_first_value(detail, "ColorDescription")).replace("\n", "<br>")
+        body_rows.append(
+            "<tr>"
+            f"<td>{escape(_first_value(detail, 'PO'))}</td>"
+            f"<td>{escape(_fmt_number(in_line, 0)) if in_line is not None else ''}</td>"
+            f"<td>{escape(_fmt_number(sewn, 0)) if sewn is not None else ''}</td>"
+            f"<td>{escape(_fmt_number(remaining, 0)) if remaining is not None else ''}</td>"
+            f"<td>{escape(_fmt_number(needed, 0)) if needed is not None else ''}</td>"
+            f"<td class='color'>{color}</td>"
+            f"<td>{escape(_first_value(detail, 'Size'))}</td>"
+            f"<td>{escape(_fmt_number(quantity, 0)) if quantity is not None else ''}</td>"
+            f"<td>{escape(_first_value(detail, 'Note'))}</td>"
+            "</tr>"
+        )
+
+    delivery_rows = "".join(
+        f"<tr><td>Giao BTP lần {n}</td><td></td><td></td><td></td><td></td></tr>" for n in range(1, 5)
+    )
+
+    return f"""<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Phiếu cấp BTP {escape(doc_no)}</title><style>
+@page{{size:A4;margin:10mm}} *{{box-sizing:border-box}} body{{margin:0;color:#111;font:12px Arial,sans-serif}} .sheet{{max-width:1000px;margin:auto}}
+.top{{display:flex;justify-content:space-between;align-items:flex-start}} .form-code{{text-align:right;font-size:12px}}
+.heading{{text-align:center;margin:10px 0 14px;position:relative}} .heading h1{{margin:0;font-size:22px;letter-spacing:.5px}}
+.qr{{position:absolute;right:0;top:-6px;text-align:center;font-size:10px}} .qr .box{{width:64px;height:64px;border:1px dashed #999;display:flex;align-items:center;justify-content:center;font-size:8px;color:#999;margin:0 auto 2px}}
+.meta{{display:flex;gap:24px;font-size:12px;margin-bottom:4px}} .meta b{{margin-right:4px}}
+.meta2{{font-size:12px;margin-bottom:10px}}
+table{{width:100%;border-collapse:collapse}} th,td{{border:1px solid #333;padding:5px;text-align:center;font-size:11px;vertical-align:middle}} th{{background:#f1f0e8}}
+td.color{{text-align:left}} tfoot td{{font-weight:700}} tfoot td:first-child{{text-align:right}}
+.section-title{{font-weight:700;margin:14px 0 6px}}
+.delivery td:first-child{{text-align:left}}
+.sign{{display:grid;grid-template-columns:1fr 1fr 1fr;text-align:center;margin-top:26px;font-size:12px}} .sign .role{{font-weight:700}} .sign .name{{margin-top:40px;font-weight:700}}
+.sign-date{{text-align:right;font-weight:700;margin-top:18px;font-size:12px}}
+.actions{{position:fixed;right:12px;top:12px}} button{{border:0;border-radius:6px;background:#172239;padding:8px 14px;color:#fff;cursor:pointer}} @media print{{.actions{{display:none}}}}
+</style></head><body><div class="actions"><button onclick="window.print()">In phiếu</button></div><main class="sheet">
+<div class="top"><div>CÔNG TY CỔ PHẦN ĐỒNG TIẾN</div><div class="form-code">{escape(form_no)}<br>Số lần sửa đổi: {escape(revision_no)}</div></div>
+<div class="heading"><h1>PHIẾU CẤP BÁN THÀNH PHẨM</h1>
+<div class="qr"><div class="box">QR</div>{escape(qr_code)}</div>
+</div>
+<div class="meta">
+<div><b>Đơn vị:</b>{escape(_first_value(row, 'Unit'))}</div>
+<div><b>Tổ:</b>{escape(_first_value(row, 'Line'))}</div>
+<div><b>Mã hàng:</b>{escape(_first_value(row, 'Style'))}</div>
+<div><b>Lệnh:</b>{escape(_first_value(row, 'ProductionOrder'))}</div>
+<div><b>Mùa:</b>{escape(_first_value(row, 'Season'))}</div>
+</div>
+<div class="meta2">{escape(receive_date)}{' (nhận BTP)' if receive_date else ''}</div>
+<table><thead>
+<tr>
+<th rowspan="2">Số PO</th>
+<th rowspan="2">Số lượng<br>đã vào chuyền</th>
+<th rowspan="2">Số lượng<br>đã may ra</th>
+<th rowspan="2">Số lượng<br>tồn</th>
+<th colspan="5">Cấp bán thành phẩm</th>
+</tr>
+<tr><th>Số lượng<br>cần cấp</th><th>Màu</th><th>Size</th><th>Số lượng</th><th>Ghi chú</th></tr>
+</thead>
+<tbody>{''.join(body_rows) if body_rows else '<tr><td colspan="9">Không có dữ liệu</td></tr>'}</tbody>
+<tfoot><tr>
+<td>Tổng cộng:</td>
+<td>{escape(_fmt_number(totals['in_line'], 0))}</td>
+<td>{escape(_fmt_number(totals['sewn'], 0))}</td>
+<td>{escape(_fmt_number(totals['remaining'], 0))}</td>
+<td>{escape(_fmt_number(totals['needed'], 0))}</td>
+<td></td><td></td>
+<td>{escape(_fmt_number(totals['quantity'], 0))}</td>
+<td></td>
+</tr></tfoot>
+</table>
+<div class="section-title">YÊU CẦU TẦN SUẤT GIAO BTP:</div>
+<table class="delivery"><thead><tr><th>Số lần giao BTP</th><th>Thời gian giao</th><th>Size/Vóc</th><th>Số lượng</th><th>Ghi chú</th></tr></thead>
+<tbody>{delivery_rows}</tbody></table>
+<div class="sign-date">{escape(request_date)}</div>
+<section class="sign">
+<div><div class="role">(P)Giám đốc xí nghiệp</div><div class="name">{escape(_first_value(row, 'FactoryDirector'))}</div></div>
+<div><div class="role">Tổ trưởng</div><div class="name">{escape(_first_value(row, 'TeamLeader'))}</div></div>
+<div><div class="role">Người đề nghị</div><div class="name">{escape(_first_value(row, 'Requester'))}</div></div>
+</section>
+</main></body></html>"""
+
+
+def _wip_outbound_print_html(row: dict) -> str:
+    details = [item for item in _json_list(row, "DetailsJson") if isinstance(item, dict)]
+
+    doc_no = _first_value(row, "SoPhieuCapBTP")
+    form_no = _first_value(row, "FormNo")
+    revision_no = _first_value(row, "RevisionNo")
+    qr_code = _first_value(row, "QrCode") or doc_no
+    issue_date = _fmt_date_vn_words(row.get("IssueDate"))
+    request_date = _fmt_date_vn_words(row.get("RequestDate"))
+
+    body_rows = []
+    totals = {"in_line": 0.0, "sewn": 0.0, "remaining": 0.0, "needed": 0.0, "quantity": 0.0}
+
+    def add_total(key: str, value: object) -> float | None:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        totals[key] += number
+        return number
+
+    for detail in details:
+        in_line = add_total("in_line", detail.get("QuantityInLine"))
+        sewn = add_total("sewn", detail.get("QuantitySewn"))
+        remaining = add_total("remaining", detail.get("QuantityRemaining"))
+        needed = add_total("needed", detail.get("QuantityNeeded"))
+        quantity = add_total("quantity", detail.get("Quantity"))
+        color = escape(_first_value(detail, "ColorDescription")).replace("\n", "<br>")
+        body_rows.append(
+            "<tr>"
+            f"<td>{escape(_first_value(detail, 'PO'))}</td>"
+            f"<td>{escape(_fmt_number(in_line, 0)) if in_line is not None else ''}</td>"
+            f"<td>{escape(_fmt_number(sewn, 0)) if sewn is not None else ''}</td>"
+            f"<td>{escape(_fmt_number(remaining, 0)) if remaining is not None else ''}</td>"
+            f"<td>{escape(_fmt_number(needed, 0)) if needed is not None else ''}</td>"
+            f"<td class='color'>{color}</td>"
+            f"<td>{escape(_first_value(detail, 'Size'))}</td>"
+            f"<td>{escape(_fmt_number(quantity, 0)) if quantity is not None else ''}</td>"
+            f"<td>{escape(_first_value(detail, 'Note'))}</td>"
+            "</tr>"
+        )
+
+    delivery_rows = "".join(
+        f"<tr><td>Giao BTP lần {n}</td><td></td><td></td><td></td><td></td></tr>" for n in range(1, 5)
+    )
+
+    return f"""<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Phiếu xuất BTP {escape(doc_no)}</title><style>
+@page{{size:A4;margin:10mm}} *{{box-sizing:border-box}} body{{margin:0;color:#111;font:12px Arial,sans-serif}} .sheet{{max-width:1000px;margin:auto}}
+.top{{display:flex;justify-content:space-between;align-items:flex-start}} .form-code{{text-align:right;font-size:12px}}
+.heading{{text-align:center;margin:10px 0 14px;position:relative}} .heading h1{{margin:0;font-size:22px;letter-spacing:.5px}}
+.qr{{position:absolute;right:0;top:-6px;text-align:center;font-size:10px}} .qr .box{{width:64px;height:64px;border:1px dashed #999;display:flex;align-items:center;justify-content:center;font-size:8px;color:#999;margin:0 auto 2px}}
+.meta{{display:flex;gap:24px;font-size:12px;margin-bottom:4px}} .meta b{{margin-right:4px}}
+.meta2{{font-size:12px;margin-bottom:10px}}
+table{{width:100%;border-collapse:collapse}} th,td{{border:1px solid #333;padding:5px;text-align:center;font-size:11px;vertical-align:middle}} th{{background:#f1f0e8}}
+td.color{{text-align:left}} tfoot td{{font-weight:700}} tfoot td:first-child{{text-align:right}}
+.section-title{{font-weight:700;margin:14px 0 6px}}
+.delivery td:first-child{{text-align:left}}
+.sign{{display:grid;grid-template-columns:1fr 1fr 1fr;text-align:center;margin-top:26px;font-size:12px}} .sign .role{{font-weight:700}} .sign .name{{margin-top:40px;font-weight:700}}
+.sign-date{{text-align:right;font-weight:700;margin-top:18px;font-size:12px}}
+.actions{{position:fixed;right:12px;top:12px}} button{{border:0;border-radius:6px;background:#172239;padding:8px 14px;color:#fff;cursor:pointer}} @media print{{.actions{{display:none}}}}
+</style></head><body><div class="actions"><button onclick="window.print()">In phiếu</button></div><main class="sheet">
+<div class="top"><div>CÔNG TY CỔ PHẦN ĐỒNG TIẾN</div><div class="form-code">{escape(form_no)}<br>{f'Số lần sửa đổi: {escape(revision_no)}' if revision_no else ''}</div></div>
+<div class="heading"><h1>PHIẾU XUẤT BÁN THÀNH PHẨM</h1>
+<div class="qr"><div class="box">QR</div>{escape(qr_code)}</div>
+</div>
+<div class="meta">
+<div><b>Đơn vị:</b>{escape(_first_value(row, 'Unit'))}</div>
+<div><b>Tổ:</b>{escape(_first_value(row, 'Line'))}</div>
+<div><b>Mã hàng:</b>{escape(_first_value(row, 'Style'))}</div>
+<div><b>Lệnh:</b>{escape(_first_value(row, 'ProductionOrder'))}</div>
+<div><b>Mùa:</b>{escape(_first_value(row, 'Season'))}</div>
+</div>
+<div class="meta2">{escape(issue_date)}{' (xuất BTP)' if issue_date else ''}</div>
+<table><thead>
+<tr>
+<th rowspan="2">Số PO</th>
+<th rowspan="2">Số lượng<br>đã vào chuyền</th>
+<th rowspan="2">Số lượng<br>đã may ra</th>
+<th rowspan="2">Số lượng<br>tồn</th>
+<th colspan="5">Xuất bán thành phẩm</th>
+</tr>
+<tr><th>Số lượng<br>xuất</th><th>Màu</th><th>Size</th><th>Số lượng</th><th>Ghi chú</th></tr>
+</thead>
+<tbody>{''.join(body_rows) if body_rows else '<tr><td colspan="9">Không có dữ liệu</td></tr>'}</tbody>
+<tfoot><tr>
+<td>Tổng cộng:</td>
+<td>{escape(_fmt_number(totals['in_line'], 0))}</td>
+<td>{escape(_fmt_number(totals['sewn'], 0))}</td>
+<td>{escape(_fmt_number(totals['remaining'], 0))}</td>
+<td>{escape(_fmt_number(totals['needed'], 0))}</td>
+<td></td><td></td>
+<td>{escape(_fmt_number(totals['quantity'], 0))}</td>
+<td></td>
+</tr></tfoot>
+</table>
+<div class="section-title">YÊU CẦU TẦN SUẤT GIAO BTP:</div>
+<table class="delivery"><thead><tr><th>Số lần giao BTP</th><th>Thời gian giao</th><th>Size/Vóc</th><th>Số lượng</th><th>Ghi chú</th></tr></thead>
+<tbody>{delivery_rows}</tbody></table>
+<div class="sign-date">{escape(request_date)}</div>
+<section class="sign">
+<div><div class="role">(P)Giám đốc xí nghiệp</div><div class="name">{escape(_first_value(row, 'FactoryDirector'))}</div></div>
+<div><div class="role">Tổ trưởng</div><div class="name">{escape(_first_value(row, 'TeamLeader'))}</div></div>
+<div><div class="role">Người đề nghị</div><div class="name">{escape(_first_value(row, 'Requester'))}</div></div>
+</section>
+</main></body></html>"""
+
+
+def _wip_scanning_print_html(row: dict) -> str:
+    details = [item for item in _json_list(row, "DetailsJson") if isinstance(item, dict)]
+
+    doc_no = _first_value(row, "SoPhieuCapBTP")
+    form_no = _first_value(row, "FormNo")
+    revision_no = _first_value(row, "RevisionNo")
+    qr_code = _first_value(row, "QrCode") or doc_no
+    scan_date = _fmt_date_vn_words(row.get("ScanDate"))
+    request_date = _fmt_date_vn_words(row.get("RequestDate"))
+
+    body_rows = []
+    totals = {"in_line": 0.0, "sewn": 0.0, "remaining": 0.0, "needed": 0.0, "quantity": 0.0}
+
+    def add_total(key: str, value: object) -> float | None:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        totals[key] += number
+        return number
+
+    for detail in details:
+        in_line = add_total("in_line", detail.get("QuantityInLine"))
+        sewn = add_total("sewn", detail.get("QuantitySewn"))
+        remaining = add_total("remaining", detail.get("QuantityRemaining"))
+        needed = add_total("needed", detail.get("QuantityNeeded"))
+        quantity = add_total("quantity", detail.get("Quantity"))
+        color = escape(_first_value(detail, "ColorDescription")).replace("\n", "<br>")
+        body_rows.append(
+            "<tr>"
+            f"<td>{escape(_first_value(detail, 'PO'))}</td>"
+            f"<td>{escape(_fmt_number(in_line, 0)) if in_line is not None else ''}</td>"
+            f"<td>{escape(_fmt_number(sewn, 0)) if sewn is not None else ''}</td>"
+            f"<td>{escape(_fmt_number(remaining, 0)) if remaining is not None else ''}</td>"
+            f"<td>{escape(_fmt_number(needed, 0)) if needed is not None else ''}</td>"
+            f"<td class='color'>{color}</td>"
+            f"<td>{escape(_first_value(detail, 'Size'))}</td>"
+            f"<td>{escape(_fmt_number(quantity, 0)) if quantity is not None else ''}</td>"
+            f"<td>{escape(_first_value(detail, 'Note'))}</td>"
+            "</tr>"
+        )
+
+    delivery_rows = "".join(
+        f"<tr><td>Giao BTP lần {n}</td><td></td><td></td><td></td><td></td></tr>" for n in range(1, 5)
+    )
+
+    return f"""<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Phiếu quét nhận BTP {escape(doc_no)}</title><style>
+@page{{size:A4;margin:10mm}} *{{box-sizing:border-box}} body{{margin:0;color:#111;font:12px Arial,sans-serif}} .sheet{{max-width:1000px;margin:auto}}
+.top{{display:flex;justify-content:space-between;align-items:flex-start}} .form-code{{text-align:right;font-size:12px}}
+.heading{{text-align:center;margin:10px 0 14px;position:relative}} .heading h1{{margin:0;font-size:22px;letter-spacing:.5px}}
+.qr{{position:absolute;right:0;top:-6px;text-align:center;font-size:10px}} .qr .box{{width:64px;height:64px;border:1px dashed #999;display:flex;align-items:center;justify-content:center;font-size:8px;color:#999;margin:0 auto 2px}}
+.meta{{display:flex;gap:24px;font-size:12px;margin-bottom:4px}} .meta b{{margin-right:4px}}
+.meta2{{font-size:12px;margin-bottom:10px}}
+table{{width:100%;border-collapse:collapse}} th,td{{border:1px solid #333;padding:5px;text-align:center;font-size:11px;vertical-align:middle}} th{{background:#f1f0e8}}
+td.color{{text-align:left}} tfoot td{{font-weight:700}} tfoot td:first-child{{text-align:right}}
+.section-title{{font-weight:700;margin:14px 0 6px}}
+.delivery td:first-child{{text-align:left}}
+.sign{{display:grid;grid-template-columns:1fr 1fr 1fr;text-align:center;margin-top:26px;font-size:12px}} .sign .role{{font-weight:700}} .sign .name{{margin-top:40px;font-weight:700}}
+.sign-date{{text-align:right;font-weight:700;margin-top:18px;font-size:12px}}
+.actions{{position:fixed;right:12px;top:12px}} button{{border:0;border-radius:6px;background:#172239;padding:8px 14px;color:#fff;cursor:pointer}} @media print{{.actions{{display:none}}}}
+</style></head><body><div class="actions"><button onclick="window.print()">In phiếu</button></div><main class="sheet">
+<div class="top"><div>CÔNG TY CỔ PHẦN ĐỒNG TIẾN</div><div class="form-code">{escape(form_no)}<br>{f'Số lần sửa đổi: {escape(revision_no)}' if revision_no else ''}</div></div>
+<div class="heading"><h1>PHIẾU QUÉT NHẬN BÁN THÀNH PHẨM</h1>
+<div class="qr"><div class="box">QR</div>{escape(qr_code)}</div>
+</div>
+<div class="meta">
+<div><b>Đơn vị:</b>{escape(_first_value(row, 'Unit'))}</div>
+<div><b>Tổ:</b>{escape(_first_value(row, 'Line'))}</div>
+<div><b>Mã hàng:</b>{escape(_first_value(row, 'Style'))}</div>
+<div><b>Lệnh:</b>{escape(_first_value(row, 'ProductionOrder'))}</div>
+<div><b>Mùa:</b>{escape(_first_value(row, 'Season'))}</div>
+</div>
+<div class="meta2">{escape(scan_date)}{' (quét nhận BTP)' if scan_date else ''}</div>
+<table><thead>
+<tr>
+<th rowspan="2">Số PO</th>
+<th rowspan="2">Số lượng<br>đã vào chuyền</th>
+<th rowspan="2">Số lượng<br>đã may ra</th>
+<th rowspan="2">Số lượng<br>tồn</th>
+<th colspan="5">Quét nhận bán thành phẩm</th>
+</tr>
+<tr><th>Số lượng<br>quét nhận</th><th>Màu</th><th>Size</th><th>Số lượng</th><th>Ghi chú</th></tr>
+</thead>
+<tbody>{''.join(body_rows) if body_rows else '<tr><td colspan="9">Không có dữ liệu</td></tr>'}</tbody>
+<tfoot><tr>
+<td>Tổng cộng:</td>
+<td>{escape(_fmt_number(totals['in_line'], 0))}</td>
+<td>{escape(_fmt_number(totals['sewn'], 0))}</td>
+<td>{escape(_fmt_number(totals['remaining'], 0))}</td>
+<td>{escape(_fmt_number(totals['needed'], 0))}</td>
+<td></td><td></td>
+<td>{escape(_fmt_number(totals['quantity'], 0))}</td>
+<td></td>
+</tr></tfoot>
+</table>
+<div class="section-title">YÊU CẦU TẦN SUẤT GIAO BTP:</div>
+<table class="delivery"><thead><tr><th>Số lần giao BTP</th><th>Thời gian giao</th><th>Size/Vóc</th><th>Số lượng</th><th>Ghi chú</th></tr></thead>
+<tbody>{delivery_rows}</tbody></table>
+<div class="sign-date">{escape(request_date)}</div>
+<section class="sign">
+<div><div class="role">(P)Giám đốc xí nghiệp</div><div class="name">{escape(_first_value(row, 'FactoryDirector'))}</div></div>
+<div><div class="role">Tổ trưởng</div><div class="name">{escape(_first_value(row, 'TeamLeader'))}</div></div>
+<div><div class="role">Người đề nghị</div><div class="name">{escape(_first_value(row, 'Requester'))}</div></div>
+</section>
+</main></body></html>"""
+
+
+def _fmt_plain(value: object) -> str:
+    if value is None or value == "":
+        return ""
+    if isinstance(value, (int, float)):
+        return str(int(value)) if float(value) == int(value) else f"{value:g}"
+    return str(value)
+
+
+def _round_half_up(value: float, decimals: int = 2) -> float:
+    quantum = Decimal("1").scaleb(-decimals)
+    return float(Decimal(str(value)).quantize(quantum, rounding=ROUND_HALF_UP))
+
+
+def _endline_severity_bucket(value: object) -> str | None:
+    text = str(value or "").strip().upper()
+    if text == "NGHIÊM TRỌNG":
+        return "critical"
+    if text == "NẶNG":
+        return "major"
+    if text == "NHẸ":
+        return "minor"
+    return None
+
+
+def _endline_image_cell(label: str, url: str) -> str:
+    body = f"<img src='{escape(url)}' alt='{escape(label)}'>" if url else "<span class='no-image'>Không có ảnh</span>"
+    return f"<div class='img-label'>{escape(label)}</div>{body}"
+
+
+def _endline_print_html(row: dict) -> str:
+    tables = [item for item in _json_list(row, "MeasurementTablesJson") if isinstance(item, dict)]
+    defects = [item for item in _json_list(row, "DefectsJson") if isinstance(item, dict)]
+
+    doc_no = _first_value(row, "InspectionId")
+    form_no = _first_value(row, "FormNo") or "BM 03 HD 10-05"
+    revision_no = _first_value(row, "RevisionNo") or "02"
+    inspection_date = _fmt_date(row.get("InspectionDate"))
+
+    info_rows = [
+        ("SỐ LẦN KIỂM", "InspectionRound"),
+        ("NGÀY KIỂM", None),
+        ("CÔNG ĐOẠN", "Stage"),
+        ("TÊN NHÂN VIÊN", "Inspector"),
+        ("XÍ NGHIỆP", "Factory"),
+        ("CHUYỀN MAY", "Line"),
+        ("KHÁCH HÀNG", "Customer"),
+        ("MÃ HÀNG", "Style"),
+        ("MÀU", "ColorDescription"),
+        ("TỔNG SỐ LƯỢNG CẦN CỨ BÓC MẪU", "LotSize"),
+        ("AQL", "AqlTable"),
+        ("TỔNG SỐ LƯỢNG BÓC MẪU", "SampleSize"),
+        ("GIỚI HẠN CHẤP NHẬN LỖI NẶNG (AC)", "AcLimit"),
+        ("GIỚI HẠN CHẤP NHẬN LỖI NHẸ (RE)", "ReLimit"),
+        ("GIỚI HẠN CHẤP NHẬN LỖI NGHIÊM TRỌNG (CD)", "CdLimit"),
+    ]
+    info_html = "".join(
+        f"<tr><td class='ilabel'>{escape(label)}</td>"
+        f"<td>{escape(inspection_date if key is None else _fmt_plain(row.get(key)))}</td></tr>"
+        for label, key in info_rows
+    )
+
+    measurement_html = []
+    for table_index, table in enumerate(tables, start=1):
+        size_label = _first_value(table, "SizeLabel")
+        time_slots = [str(slot) for slot in (table.get("TimeSlots") or [])] or ["9h", "11h"]
+        rows = [item for item in (table.get("Rows") or []) if isinstance(item, dict)]
+        total_cols = 5 + 3 * len(time_slots)
+
+        slot_headers = "".join(f"<th colspan='3'>{escape(slot)}</th>" for slot in time_slots)
+        slot_subheaders = "".join("<th></th><th></th><th></th>" for _ in time_slots)
+
+        data_rows = []
+        for r in rows:
+            groups = r.get("Groups") or []
+            group_cells = []
+            for slot_index in range(len(time_slots)):
+                values = groups[slot_index] if slot_index < len(groups) and isinstance(groups[slot_index], list) else []
+                for cell_index in range(3):
+                    value = values[cell_index] if cell_index < len(values) else ""
+                    group_cells.append(f"<td>{escape(_fmt_plain(value))}</td>")
+            data_rows.append(
+                "<tr>"
+                f"<td class='code'>⚠<br>{escape(_first_value(r, 'Code'))}</td>"
+                f"<td class='desc'>{escape(_first_value(r, 'Description'))}</td>"
+                f"<td>{escape(_fmt_plain(r.get('Minus')))}</td>"
+                f"<td>{escape(_fmt_plain(r.get('Plus')))}</td>"
+                f"<td>{escape(_fmt_plain(r.get('Spec')))}</td>"
+                f"{''.join(group_cells)}"
+                "</tr>"
+            )
+
+        measurement_html.append(f"""<table class="measure"><thead>
+<tr><th colspan="{total_cols}">BẢNG THÔNG SỐ {table_index}</th></tr>
+<tr><th rowspan="2"></th><th rowspan="2">Decription/ vị trí đo</th><th colspan="2">Loại</th><th rowspan="2">{escape(size_label)}</th>{slot_headers}</tr>
+<tr><th>-</th><th>+</th>{slot_subheaders}</tr>
+</thead><tbody>{''.join(data_rows) if data_rows else f"<tr><td colspan='{total_cols}'>Không có dữ liệu</td></tr>"}</tbody></table>""")
+
+    counts = {"critical": 0.0, "major": 0.0, "minor": 0.0}
+    defect_html = []
+    for pair_start in range(0, len(defects), 2):
+        d1 = defects[pair_start]
+        d2 = defects[pair_start + 1] if pair_start + 1 < len(defects) else None
+        idx1 = pair_start + 1
+        idx2 = pair_start + 2
+
+        for d in (d1, d2):
+            if d is None:
+                continue
+            bucket = _endline_severity_bucket(d.get("Severity"))
+            if bucket:
+                try:
+                    counts[bucket] += float(d.get("Quantity") or 0)
+                except (TypeError, ValueError):
+                    pass
+
+        def field_row(label1: str, label2: str, key: str) -> str:
+            v1 = escape(_first_value(d1, key))
+            if d2 is not None:
+                v2 = escape(_first_value(d2, key))
+                return f"<tr><td class='dlabel'>{label1}</td><td>{v1}</td><td class='dlabel'>{label2}</td><td>{v2}</td></tr>"
+            return f"<tr><td class='dlabel'>{label1}</td><td>{v1}</td><td colspan='2'></td></tr>"
+
+        defect_html.append(field_row(f"LỖI {idx1}", f"LỖI {idx2}", "Name"))
+        defect_html.append(field_row(f"MỨC ĐỘ {idx1}", f"MỨC ĐỘ {idx2}", "Severity"))
+        defect_html.append(field_row(f"VỊ TRÍ LỖI {idx1}", f"VỊ TRÍ LỖI {idx2}", "Location"))
+        defect_html.append(field_row(f"SỐ LƯỢNG LỖI {idx1}", f"SỐ LƯỢNG LỖI {idx2}", "Quantity"))
+        img1 = _endline_image_cell(f"HÌNH ẢNH {idx1}", _first_value(d1, "ImageUrl"))
+        if d2 is not None:
+            img2 = _endline_image_cell(f"HÌNH ẢNH {idx2}", _first_value(d2, "ImageUrl"))
+            defect_html.append(f"<tr><td colspan='2' class='dimg'>{img1}</td><td colspan='2' class='dimg'>{img2}</td></tr>")
+        else:
+            defect_html.append(f"<tr><td colspan='2' class='dimg'>{img1}</td><td colspan='2'></td></tr>")
+
+    total_defect_qty = sum(counts.values())
+    try:
+        sample_size_num = float(row.get("SampleSize"))
+    except (TypeError, ValueError):
+        sample_size_num = None
+    rate = (total_defect_qty / sample_size_num * 100) if sample_size_num else None
+
+    def within_limit(bucket: str, limit_key: str) -> bool:
+        try:
+            limit_num = float(row.get(limit_key))
+        except (TypeError, ValueError):
+            return True
+        return counts[bucket] <= limit_num
+
+    passed = (
+        within_limit("critical", "CdLimit")
+        and within_limit("major", "AcLimit")
+        and within_limit("minor", "ReLimit")
+    )
+    result_text = "PASS" if passed else "FAIL"
+
+    non_conformance_note = _first_value(row, "NonConformanceNote")
+    signature_url = _first_value(row, "SignatureImageUrl")
+    front_image = _first_value(row, "FrontImageUrl")
+    back_image = _first_value(row, "BackImageUrl")
+
+    def garment_image(label: str, url: str) -> str:
+        return f"<img src='{escape(url)}' alt='{escape(label)}'>" if url else "<span class='no-image'>Không có ảnh</span>"
+
+    return f"""<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Báo cáo Endline {escape(doc_no)}</title><style>
+@page{{size:A4;margin:10mm}} *{{box-sizing:border-box}} body{{margin:0;color:#111;font:12px Arial,sans-serif}} .sheet{{max-width:1000px;margin:auto}}
+.top{{display:flex;justify-content:space-between;align-items:flex-start}} .logo{{width:44px;height:44px;border-radius:8px;background:#0d3b66;color:#f4c14b;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:20px}}
+.heading{{text-align:center}} .heading h1{{margin:0;font-size:22px}} .heading div{{font-size:12px;margin-top:2px}}
+.form-code{{text-align:right;font-size:12px;white-space:nowrap}}
+table{{width:100%;border-collapse:collapse;margin-top:10px}} th,td{{border:1px solid #333;padding:4px 6px;font-size:11px;vertical-align:middle}}
+th{{background:#f1f0e8;text-align:center}} td.ilabel{{font-weight:700;width:38%}} td.code{{text-align:center;width:44px}} td.desc{{text-align:left}}
+table.measure td, table.measure th{{text-align:center}} table.measure td.desc{{text-align:left}}
+.photo-box{{border:1px solid #333;text-align:center;padding:6px}} .photo-box b{{display:block;background:#f1f0e8;padding:4px;margin:-6px -6px 6px}}
+.photo-box img{{max-width:100%;max-height:160px}}
+.section-title{{text-align:center;font-weight:700;font-size:16px;margin:16px 0 4px}}
+td.dlabel{{font-weight:700;width:20%}} td.dimg{{text-align:center;padding:8px}} .img-label{{font-weight:700;margin-bottom:6px}}
+td.dimg img{{max-width:100%;max-height:140px}} .no-image{{color:#999;font-style:italic}}
+.nc-title{{text-align:center;font-weight:700;border:1px solid #333;background:#f1f0e8;padding:6px;margin-top:16px}}
+.nc-body{{border:1px solid #333;border-top:none;min-height:40px;padding:6px;font-size:11px}}
+table.result td:first-child{{font-weight:700;width:60%}} .result-pass{{color:#0a7a2f;font-weight:700}} .result-fail{{color:#c0272d;font-weight:700}}
+.signature img{{max-height:60px}}
+.actions{{position:fixed;right:12px;top:12px}} button{{border:0;border-radius:6px;background:#172239;padding:8px 14px;color:#fff;cursor:pointer}} @media print{{.actions{{display:none}}}}
+</style></head><body><div class="actions"><button onclick="window.print()">In phiếu</button></div><main class="sheet">
+<div class="top"><div class="logo">D</div>
+<div class="heading"><h1>BÁO CÁO ENDLINE</h1><div>PHÒNG QA - TEAM DFC</div></div>
+<div class="form-code">{escape(form_no)}<br>Số lần sửa đổi: {escape(revision_no)}</div>
+</div>
+<table>{info_html}</table>
+<table><tr>
+<td class="photo-box" style="width:50%"><b>MẶT TRƯỚC</b>{garment_image('Mặt trước', front_image)}</td>
+<td class="photo-box" style="width:50%"><b>MẶT SAU</b>{garment_image('Mặt sau', back_image)}</td>
+</tr></table>
+<div class="section-title">THÔNG SỐ</div>
+{''.join(measurement_html) if measurement_html else '<p>Không có bảng thông số</p>'}
+<div class="section-title">CHẤT LƯỢNG</div>
+<table class="defects"><tbody>{''.join(defect_html) if defect_html else '<tr><td>Không có lỗi</td></tr>'}</tbody></table>
+<div class="nc-title">BIÊN BẢN KIỂM TRA SP KHÔNG PHÙ HỢP (NẾU CÓ)</div>
+<div class="nc-body">{escape(non_conformance_note)}</div>
+<table class="result">
+<tr><td>TỔNG SỐ LỖI NGHIÊM TRỌNG</td><td>{escape(_fmt_plain(counts['critical']))}</td></tr>
+<tr><td>TỔNG SỐ LỖI NẶNG</td><td>{escape(_fmt_plain(counts['major']))}</td></tr>
+<tr><td>TỔNG SỐ LỖI NHẸ</td><td>{escape(_fmt_plain(counts['minor']))}</td></tr>
+<tr><td>TỔNG SỐ LƯỢNG LỖI</td><td>{escape(_fmt_plain(total_defect_qty))}</td></tr>
+<tr><td>TỶ LỆ LỖI</td><td>{f"{_round_half_up(rate):.2f}%" if rate is not None else ''}</td></tr>
+<tr><td>KẾT QUẢ</td><td class="{'result-pass' if passed else 'result-fail'}">{result_text}</td></tr>
+<tr><td>KÝ TÊN</td><td class="signature">{f"<img src='{escape(signature_url)}' alt='Ký tên'>" if signature_url else ''}</td></tr>
+</table>
+</main></body></html>"""
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     settings = get_settings()
@@ -946,6 +1676,16 @@ def print_traceability_document(
         html = _outbound_print_html(rows[0])
     elif document_type == "fabric-relaxing":
         html = _fabric_relaxing_print_html(rows[0])
+    elif document_type == "wip-inspection":
+        html = _wip_inspection_print_html(rows[0])
+    elif document_type == "wip-issuing":
+        html = _wip_issuing_print_html(rows[0])
+    elif document_type == "wip-outbound":
+        html = _wip_outbound_print_html(rows[0])
+    elif document_type == "wip-scanning":
+        html = _wip_scanning_print_html(rows[0])
+    elif document_type == "endline":
+        html = _endline_print_html(rows[0])
     else:
         html = _temporary_print_html(title, value, rows)
     return HTMLResponse(html)

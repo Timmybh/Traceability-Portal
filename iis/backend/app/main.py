@@ -425,6 +425,85 @@ table{{width:100%;border-collapse:collapse;table-layout:fixed;margin-top:6px}} t
 </main></body></html>"""
 
 
+_VN_WEEKDAYS = ["Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy", "Chủ Nhật"]
+
+
+def _fmt_date_vn(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return text
+    return f"{_VN_WEEKDAYS[parsed.weekday()]}, Ngày {parsed.day:02d} tháng {parsed.month:02d} năm {parsed.year}"
+
+
+def _outbound_print_html(row: dict) -> str:
+    details = [item for item in _json_list(row, "DetailsJson") if isinstance(item, dict)]
+
+    doc_no = _first_value(row, "DocNo")
+    signer = _first_value(row, "TenNguoiTao")
+    production_order = ""
+
+    body_rows = []
+    total_qty = 0.0
+    index = 0
+    for detail in details:
+        item_name = _first_value(detail, "DienGiai")
+        unit = _first_value(detail, "DVT")
+        rolls = [item for item in (detail.get("RollsJson") or []) if isinstance(item, dict)]
+        for roll in rolls:
+            index += 1
+            if not production_order:
+                production_order = _first_value(roll, "ProductionOrderNo")
+            barcode_start = _first_value(roll, "MaCay")
+            barcode = _first_value(roll, "MaCayMoi") or barcode_start
+            quantity = roll.get("SoLuong")
+            try:
+                total_qty += float(quantity)
+            except (TypeError, ValueError):
+                pass
+            body_rows.append(
+                "<tr>"
+                f"<td>{index}</td>"
+                f"<td>{escape(_first_value(roll, 'MaHangPO'))}</td>"
+                f"<td>{escape(item_name)}</td>"
+                f"<td>{escape(_first_value(roll, 'ArtCode'))}</td>"
+                f"<td>{escape(_first_value(roll, 'SizeCode'))}</td>"
+                f"<td>{escape(barcode_start)}</td>"
+                f"<td>{escape(barcode)}</td>"
+                f"<td class='quantity'>{escape(_fmt_number(quantity))}</td>"
+                f"<td>{escape(unit)}</td>"
+                f"<td>{escape(_first_value(roll, 'MaRo'))}</td>"
+                f"<td>{escape(_first_value(roll, 'TenViTriRo'))}</td>"
+                "</tr>"
+            )
+
+    return f"""<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Danh sách soạn hàng {escape(doc_no)}</title><style>
+@page{{size:A4;margin:10mm}} *{{box-sizing:border-box}} body{{margin:0;color:#111;font:12px Arial,sans-serif}} .sheet{{max-width:1000px;margin:auto}}
+.top{{display:flex;justify-content:space-between;align-items:flex-start}} .company{{font-weight:700}}
+.heading{{text-align:center;margin:6px 0 14px}} .heading h1{{margin:0;font-size:20px}} .heading .lsx{{font-size:13px;margin-top:2px}}
+.doc-no{{font-weight:700;font-size:13px;text-align:right}}
+table{{width:100%;border-collapse:collapse}} th,td{{border:1px solid #333;padding:5px;text-align:center;font-size:11px;vertical-align:middle}} th{{background:#f1f0e8}}
+.quantity{{text-align:right}} tfoot td{{font-weight:700}} tfoot td:first-child{{text-align:left}}
+.sign{{text-align:right;margin-top:22px;font-size:12px}} .sign b{{display:block;margin-top:26px}}
+.actions{{position:fixed;right:12px;top:12px}} button{{border:0;border-radius:6px;background:#172239;padding:8px 14px;color:#fff;cursor:pointer}} @media print{{.actions{{display:none}}}}
+</style></head><body><div class="actions"><button onclick="window.print()">In phiếu</button></div><main class="sheet">
+<div class="top"><div class="company">CÔNG TY CỔ PHẦN ĐỒNG TIẾN<br><span style="font-weight:400">ĐƠN VỊ: KHO</span></div><div class="doc-no">{escape(doc_no)}</div></div>
+<div class="heading"><h1>DANH SÁCH SOẠN HÀNG</h1>{f'<div class="lsx">LSX: {escape(production_order)}</div>' if production_order else ''}</div>
+<table><thead><tr>
+<th>STT</th><th>Mã hàng</th><th>Tên vật tư</th><th>Art</th><th>Size</th><th>Barcode BĐ</th><th>Barcode</th><th>Số lượng<br>thực xuất</th><th>ĐVT</th><th>Rọ/Pallet</th><th>Vị trí</th>
+</tr></thead>
+<tbody>{''.join(body_rows) if body_rows else '<tr><td colspan="11">Không có dữ liệu</td></tr>'}</tbody>
+<tfoot><tr><td colspan="7">TỔNG:</td><td class="quantity">{escape(_fmt_number(total_qty))}</td><td colspan="3"></td></tr></tfoot>
+</table>
+<section class="sign">{escape(_fmt_date_vn(row.get('DocDate')))}<b>Nhân viên soạn hàng</b>{escape(signer)}</section>
+</main></body></html>"""
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     settings = get_settings()
@@ -797,6 +876,8 @@ def print_traceability_document(
         html = _fabric_inspection_print_html(rows[0])
     elif document_type == "pl-inspection":
         html = _pl_inspection_print_html(rows[0])
+    elif document_type == "rm-outbound":
+        html = _outbound_print_html(rows[0])
     else:
         html = _temporary_print_html(title, value, rows)
     return HTMLResponse(html)

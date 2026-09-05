@@ -504,6 +504,46 @@ OUTER APPLY (
     ) AS outboundRows
 ) AS materialOutbound
 OUTER APPLY (
+    -- Công đoạn 06 "Nhận NPL từ kho": ngày chuyền thực nhận phụ liệu, lấy theo
+    -- lần đầu tiên phụ liệu của lệnh sản xuất này được cập nhật vị trí lên kệ tại
+    -- chuyền (dbo.WH_KhoPhuLieu_Chuyen.TGCapNhatVT). Đã xác minh trên DB thật:
+    -- WH_KhoPhuLieu_Chuyen.MaHang khớp đúng ProductCode/style (vd "350688"),
+    -- WH_KhoPhuLieu_Chuyen.LenhSanXuat khớp đúng lệnh sản xuất, và các ngày cập
+    -- nhật vị trí đứng trước ngày duyệt phiếu cấp BTP (công đoạn 12) như đúng thứ
+    -- tự quy trình. Không lọc theo SizeCode vì cột này với một số loại phụ liệu
+    -- (chỉ, dây kéo...) là quy cách cuộn/kiện (vd "5000M"), không phải size
+    -- thành phẩm.
+    SELECT
+        MIN(shelfRow.TGCapNhatVT) AS StepDate,
+        JSON_QUERY((
+            SELECT
+                ROW_NUMBER() OVER (ORDER BY shelfRow.TGCapNhatVT, shelfRow.Id) AS DetailId,
+                ROW_NUMBER() OVER (ORDER BY shelfRow.TGCapNhatVT, shelfRow.Id) AS DetailNo,
+                shelfRow.TGCapNhatVT AS DetailDate,
+                CONCAT(
+                    COALESCE(NULLIF(LTRIM(RTRIM(shelfRow.TenNPLGoc)), N''), NULLIF(LTRIM(RTRIM(shelfRow.TenMau)), N'')),
+                    N' - Vị trí: ', shelfRow.TenViTri
+                ) AS DetailContent,
+                shelfRow.NguoiCapNhatVT AS UpdatedBy,
+                shelfRow.SL AS Quantity,
+                shelfRow.DVT AS Unit
+            FROM dbo.WH_KhoPhuLieu_Chuyen AS shelfRow
+            WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), shelfRow.LenhSanXuat))) =
+                  LTRIM(RTRIM(CONVERT(nvarchar(255), COALESCE(tc.LenhSanXuat, cap.LenhSanXuat))))
+              AND LTRIM(RTRIM(CONVERT(nvarchar(255), shelfRow.MaHang))) =
+                  LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode)))
+              AND shelfRow.TGCapNhatVT IS NOT NULL
+            ORDER BY shelfRow.TGCapNhatVT, shelfRow.Id
+            FOR JSON PATH
+        )) AS DetailsJson
+    FROM dbo.WH_KhoPhuLieu_Chuyen AS shelfRow
+    WHERE LTRIM(RTRIM(CONVERT(nvarchar(255), shelfRow.LenhSanXuat))) =
+          LTRIM(RTRIM(CONVERT(nvarchar(255), COALESCE(tc.LenhSanXuat, cap.LenhSanXuat))))
+      AND LTRIM(RTRIM(CONVERT(nvarchar(255), shelfRow.MaHang))) =
+          LTRIM(RTRIM(CONVERT(nvarchar(255), mp.ProductCode)))
+      AND shelfRow.TGCapNhatVT IS NOT NULL
+) AS materialShelfUpdate
+OUTER APPLY (
     SELECT
         MAX(relaxingRows.ThoiGianTaoPhieu) AS StepDate,
         JSON_QUERY((
@@ -677,9 +717,9 @@ OUTER APPLY (
             WHERE materialOutbound.DetailsJson <> N'[]'
             UNION ALL
             SELECT
-                CAST(6 AS bigint), 6, N'Nhận NPL từ kho', N'Receive Materials', materialOutbound.StepDate,
-                N'Ngày nhận NPL theo ngày xuất kho NPL', CAST(N'[]' AS nvarchar(max))
-            WHERE materialOutbound.StepDate IS NOT NULL
+                CAST(6 AS bigint), 6, N'Nhận NPL từ kho', N'Receive Materials', materialShelfUpdate.StepDate,
+                N'Ngày phụ liệu được cập nhật vị trí lên kệ tại chuyền', materialShelfUpdate.DetailsJson
+            WHERE materialShelfUpdate.DetailsJson <> N'[]'
             UNION ALL
             SELECT
                 CAST(7 AS bigint), 7, N'Xả vải', N'Fabric Relaxing', fabricRelaxing.StepDate,

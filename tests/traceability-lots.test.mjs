@@ -114,7 +114,9 @@ test("SQLQUERY uses tracking tables and SQLQUERY_NEW uses the cutting mapping ch
   assert.match(sqlQueryNew, /outboundRow\.ThoiGianXacNhanXuat/);
   assert.match(sqlQueryNew, /LIKE N'\[NP\]A%'/);
   assert.match(sqlQueryNew, /5, N'Xuất kho NPL', N'RM Outbound'/);
-  assert.match(sqlQueryNew, /6, N'Nhận NPL từ kho', N'Receive Materials', materialOutbound\.StepDate/);
+  assert.match(sqlQueryNew, /6, N'Nhận NPL từ kho', N'Receive Materials', materialShelfUpdate\.StepDate/);
+  assert.match(sqlQueryNew, /WH_KhoPhuLieu_Chuyen AS shelfRow/);
+  assert.match(sqlQueryNew, /shelfRow\.TGCapNhatVT/);
   assert.match(sqlQueryNew, /CUTTING_PhieuXaVai AS relaxingRow/);
   assert.match(sqlQueryNew, /relaxingRow\.MaCay/);
   assert.match(sqlQueryNew, /tc\.MaCay/);

@@ -12,6 +12,7 @@ const steps = [
   ["11", "Nhập kho BTP", "WIP Inbound", ""],
   ["12", "Đặt BTP", "WIP Issuing", ""],
   ["13", "Xuất BTP", "WIP Outbound", ""],
+  ["14", "Xuất BTP gia công", "WIP to Subcontractor", ""],
   ["15", "Quét nhận BTP", "WIP Scanning", ""],
   ["16", "Kiểm Inline", "Inline Inspection", ""],
   ["17", "Biên bản kiểm sản phẩm đầu chuyền", "Start-of-Line Check", ""],

@@ -57,6 +57,7 @@ _PRINT_QUERY_TYPES = {
     "wip-inbound": ("11 - Phiếu nhập kho BTP", "wip-inbound.sql"),
     "wip-issuing": ("12 - Phiếu đặt BTP", "wip-issuing.sql"),
     "wip-outbound": ("13 - Phiếu xuất BTP", "wip-outbound.sql"),
+    "wip-to-subcontractor": ("14 - Phiếu xuất BTP gia công", "wip-to-subcontractor.sql"),
     "wip-scanning": ("15 - Phiếu quét nhận BTP", "wip-scanning.sql"),
     "endline": ("QC - Báo cáo Endline", "endline.sql"),
 }
@@ -981,6 +982,91 @@ td.color{{text-align:left}} tfoot td{{font-weight:700}} tfoot td:first-child{{te
 </main></body></html>"""
 
 
+def _wip_to_subcontractor_print_html(row: dict) -> str:
+    details = [item for item in _json_list(row, "DetailsJson") if isinstance(item, dict)]
+
+    doc_no = _first_value(row, "DocNo")
+    status = _first_value(row, "Status")
+    created_date = _fmt_date(row.get("CreatedDate"))
+
+    body_rows = []
+    totals = {"out": 0.0, "in": 0.0, "remaining": 0.0}
+
+    def add_total(key: str, value: object) -> float | None:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        totals[key] += number
+        return number
+
+    for index, detail in enumerate(details, start=1):
+        qty_out = add_total("out", detail.get("QuantityOut"))
+        qty_in = add_total("in", detail.get("QuantityIn"))
+        qty_remaining = add_total("remaining", detail.get("QuantityRemaining"))
+        scan_date, scan_time = _fmt_datetime_parts(detail.get("ScannedOutAt"))
+        body_rows.append(
+            "<tr>"
+            f"<td>{index}</td>"
+            f"<td>{escape(_first_value(detail, 'Barcode'))}</td>"
+            f"<td>{escape(_first_value(detail, 'PO'))}</td>"
+            f"<td>{escape(_first_value(detail, 'ProductCode'))}</td>"
+            f"<td>{escape(_first_value(detail, 'Size'))}</td>"
+            f"<td>{escape(_first_value(detail, 'SubcontractType'))}</td>"
+            f"<td>{escape(_fmt_number(qty_out, 0)) if qty_out is not None else ''}</td>"
+            f"<td>{escape(_fmt_number(qty_in, 0)) if qty_in is not None else ''}</td>"
+            f"<td>{escape(_fmt_number(qty_remaining, 0)) if qty_remaining is not None else ''}</td>"
+            f"<td>{escape(_first_value(detail, 'ScannedOutBy'))}</td>"
+            f"<td>{escape(scan_date)} {escape(scan_time)}</td>"
+            f"<td>{escape(_first_value(detail, 'Note'))}</td>"
+            "</tr>"
+        )
+
+    return f"""<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Phiếu xuất BTP gia công {escape(doc_no)}</title><style>
+@page{{size:A4;margin:10mm}} *{{box-sizing:border-box}} body{{margin:0;color:#111;font:12px Arial,sans-serif}} .sheet{{max-width:1100px;margin:auto}}
+.top{{display:flex;justify-content:space-between;align-items:flex-start}}
+.heading{{text-align:center;margin:10px 0 14px}} .heading h1{{margin:0;font-size:22px;letter-spacing:.5px}}
+.meta{{display:flex;flex-wrap:wrap;gap:24px;font-size:12px;margin-bottom:4px}} .meta b{{margin-right:4px}}
+table{{width:100%;border-collapse:collapse;margin-top:10px}} th,td{{border:1px solid #333;padding:5px;text-align:center;font-size:11px;vertical-align:middle}} th{{background:#f1f0e8}}
+tfoot td{{font-weight:700}} tfoot td:first-child{{text-align:right}}
+.sign{{display:grid;grid-template-columns:1fr 1fr 1fr;text-align:center;margin-top:26px;font-size:12px}} .sign .role{{font-weight:700}} .sign .name{{margin-top:40px;font-weight:700}}
+.actions{{position:fixed;right:12px;top:12px}} button{{border:0;border-radius:6px;background:#172239;padding:8px 14px;color:#fff;cursor:pointer}} @media print{{.actions{{display:none}}}}
+</style></head><body><div class="actions"><button onclick="window.print()">In phiếu</button></div><main class="sheet">
+<div class="top"><div>CÔNG TY CỔ PHẦN ĐỒNG TIẾN</div><div>{escape(created_date)}</div></div>
+<div class="heading"><h1>PHIẾU XUẤT BÁN THÀNH PHẨM GIA CÔNG</h1></div>
+<div class="meta">
+<div><b>Số phiếu:</b>{escape(doc_no)}</div>
+<div><b>Trạng thái:</b>{escape(status)}</div>
+<div><b>Lệnh SX:</b>{escape(_first_value(row, 'ProductionOrder'))}</div>
+<div><b>Khách hàng:</b>{escape(_first_value(row, 'CustomerCode'))}</div>
+</div>
+<div class="meta">
+<div><b>Đơn vị gia công:</b>{escape(_first_value(row, 'UnitName'))} ({escape(_first_value(row, 'UnitCode'))})</div>
+<div><b>Địa chỉ:</b>{escape(_first_value(row, 'UnitAddress'))}</div>
+</div>
+<table><thead><tr>
+<th>STT</th><th>Tem BTP</th><th>PO</th><th>Mã hàng</th><th>Size</th><th>Loại gia công</th>
+<th>SL xuất</th><th>SL nhận</th><th>SL còn lại</th><th>Người quét xuất</th><th>Thời gian quét xuất</th><th>Ghi chú</th>
+</tr></thead>
+<tbody>{''.join(body_rows) if body_rows else '<tr><td colspan="12">Không có dữ liệu</td></tr>'}</tbody>
+<tfoot><tr>
+<td colspan="6">Tổng cộng:</td>
+<td>{escape(_fmt_number(totals['out'], 0))}</td>
+<td>{escape(_fmt_number(totals['in'], 0))}</td>
+<td>{escape(_fmt_number(totals['remaining'], 0))}</td>
+<td colspan="3"></td>
+</tr></tfoot>
+</table>
+<section class="sign">
+<div><div class="role">Người lập phiếu</div><div class="name">{escape(_first_value(row, 'CreatedBy'))}</div></div>
+<div><div class="role">Thủ kho</div><div class="name"></div></div>
+<div><div class="role">Đơn vị gia công nhận hàng</div><div class="name"></div></div>
+</section>
+</main></body></html>"""
+
+
 def _wip_scanning_print_html(row: dict) -> str:
     details = [item for item in _json_list(row, "DetailsJson") if isinstance(item, dict)]
 
@@ -1682,6 +1768,8 @@ def print_traceability_document(
         html = _wip_issuing_print_html(rows[0])
     elif document_type == "wip-outbound":
         html = _wip_outbound_print_html(rows[0])
+    elif document_type == "wip-to-subcontractor":
+        html = _wip_to_subcontractor_print_html(rows[0])
     elif document_type == "wip-scanning":
         html = _wip_scanning_print_html(rows[0])
     elif document_type == "endline":

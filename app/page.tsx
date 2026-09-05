@@ -32,6 +32,7 @@ const steps: TraceStep[] = [
   { no: "11", name: "Nhập kho BTP", english: "WIP Inbound", color: "#31a681", detail: "Bán thành phẩm được nhập kho." },
   { no: "12", name: "Đặt BTP", english: "WIP Issuing", color: "#35a15a", detail: "Bán thành phẩm được cấp phát cho sản xuất." },
   { no: "13", name: "Xuất BTP", english: "WIP Outbound", color: "#4f7df3", detail: "Bán thành phẩm được xuất khỏi kho." },
+  { no: "14", name: "Xuất BTP gia công", english: "WIP to Subcontractor", color: "#c026d3", detail: "Bán thành phẩm được xuất cho đơn vị gia công ngoài." },
   { no: "15", name: "Quét nhận BTP", english: "WIP Scanning", color: "#45ae7c", detail: "Chuyền sản xuất quét nhận bán thành phẩm." },
   { no: "16", name: "Kiểm Inline", english: "Inline Inspection", color: "#fb923c", detail: "Kiểm tra chất lượng trong chuyền." },
   { no: "17", name: "Biên bản kiểm sản phẩm đầu chuyền", english: "Start-of-Line Check", color: "#fb923c", detail: "Ghi nhận kết quả kiểm sản phẩm đầu chuyền." },

@@ -142,6 +142,42 @@ OUTER APPLY (
       AND cap.NgayNhanBTP IS NOT NULL
 ) AS wipOutbound
 OUTER APPLY (
+    -- Công đoạn 14 "Xuất BTP gia công": tìm tem BTP của cap.SoPhieuCapBTP/IdCapBTPCT
+    -- đã được xuất cho đơn vị gia công ngoài (dbo.CUTTING_PhieuGiaCongXuatKho_DaQuet),
+    -- rồi lấy phiếu gốc (dbo.CUTTING_PhieuGiaCongXuatKho). Đã xác minh trên DB thật
+    -- là có overlap TemBarcodeBTP giữa hai bảng CapBTP_BarcodeChiTiet và
+    -- GiaCongXuatKho_DaQuet, nhưng KHÔNG phải mọi tem đều có ngay lập tức (ETL có
+    -- độ trễ) nên đây là OUTER APPLY best-effort, có thể NULL với phiếu vừa tạo.
+    SELECT TOP (1)
+        gc.TemBarCodeBTP,
+        gcMaster.MaPhieu,
+        gcMaster.NgayTaoPhieu
+    FROM dbo.CUTTING_PhieuCapBTP_BarcodeChiTiet AS bc
+    INNER JOIN dbo.CUTTING_PhieuGiaCongXuatKho_DaQuet AS gc
+        ON gc.TemBarCodeBTP = bc.TemBarcodeBTP
+    INNER JOIN dbo.CUTTING_PhieuGiaCongXuatKho AS gcMaster
+        ON gcMaster.PhieuGiaCongXuatKhoId = gc.IdPhieuGiaCong
+    WHERE bc.SoPhieuCapBTP = cap.SoPhieuCapBTP
+      AND bc.PO = mp.PO
+      AND bc.IdCapBTPCT = cap.IdCapBTPCT
+      AND ISNULL(bc.TraBTP, 0) = 0
+    ORDER BY gc.ThoiGianQuetXuat DESC
+) AS gcBarcode
+OUTER APPLY (
+    SELECT
+        gcBarcode.NgayTaoPhieu AS StepDate,
+        JSON_QUERY((
+            SELECT
+                1 AS DetailId,
+                1 AS DetailNo,
+                gcBarcode.NgayTaoPhieu AS DetailDate,
+                CONCAT(N'Mã phiếu: ', gcBarcode.MaPhieu) AS DetailContent,
+                CONCAT(N'/api/traceability/print/wip-to-subcontractor?id=', gcBarcode.MaPhieu) AS DetailLink
+            FOR JSON PATH
+        )) AS DetailsJson
+    WHERE NULLIF(LTRIM(RTRIM(CONVERT(nvarchar(255), gcBarcode.MaPhieu))), N'') IS NOT NULL
+) AS subcontractOutbound
+OUTER APPLY (
     SELECT TOP (1)
         NULLIF(LTRIM(RTRIM(d.Lot)), N'') AS LotVaiChinh
     FROM dbo.CUTTING_PhieuCapBTP_BarcodeChiTiet AS d
@@ -411,7 +447,6 @@ OUTER APPLY (
 OUTER APPLY (
     SELECT
         MAX(outboundRows.ThoiGianXacNhanXuat) AS StepDate,
-        MIN(outboundRows.ThoiGianXacNhanXuat) AS FirstOutboundDate,
         JSON_QUERY((
             SELECT
                 ROW_NUMBER() OVER (
@@ -642,9 +677,9 @@ OUTER APPLY (
             WHERE materialOutbound.DetailsJson <> N'[]'
             UNION ALL
             SELECT
-                CAST(6 AS bigint), 6, N'Nhận NPL từ kho', N'Receive Materials', materialOutbound.FirstOutboundDate,
-                N'Ngày nhận NPL đầu tiên', CAST(N'[]' AS nvarchar(max))
-            WHERE materialOutbound.FirstOutboundDate IS NOT NULL
+                CAST(6 AS bigint), 6, N'Nhận NPL từ kho', N'Receive Materials', materialOutbound.StepDate,
+                N'Ngày nhận NPL theo ngày xuất kho NPL', CAST(N'[]' AS nvarchar(max))
+            WHERE materialOutbound.StepDate IS NOT NULL
             UNION ALL
             SELECT
                 CAST(7 AS bigint), 7, N'Xả vải', N'Fabric Relaxing', fabricRelaxing.StepDate,
@@ -680,6 +715,11 @@ OUTER APPLY (
                 CAST(13 AS bigint), 13, N'Xuất BTP', N'WIP Outbound', wipOutbound.StepDate,
                 CONCAT(N'Phiếu cấp BTP: ', cap.SoPhieuCapBTP), wipOutbound.DetailsJson
             WHERE wipOutbound.StepDate IS NOT NULL
+            UNION ALL
+            SELECT
+                CAST(14 AS bigint), 14, N'Xuất BTP gia công', N'WIP to Subcontractor', subcontractOutbound.StepDate,
+                CONCAT(N'Phiếu xuất gia công: ', gcBarcode.MaPhieu), subcontractOutbound.DetailsJson
+            WHERE subcontractOutbound.StepDate IS NOT NULL
             UNION ALL
             SELECT
                 CAST(15 AS bigint), 15, N'Quét nhận BTP', N'WIP Scanning', wipOutbound.StepDate,

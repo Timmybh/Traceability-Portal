@@ -114,8 +114,7 @@ test("SQLQUERY uses tracking tables and SQLQUERY_NEW uses the cutting mapping ch
   assert.match(sqlQueryNew, /outboundRow\.ThoiGianXacNhanXuat/);
   assert.match(sqlQueryNew, /LIKE N'\[NP\]A%'/);
   assert.match(sqlQueryNew, /5, N'Xuất kho NPL', N'RM Outbound'/);
-  assert.match(sqlQueryNew, /MIN\(outboundRows\.ThoiGianXacNhanXuat\) AS FirstOutboundDate/);
-  assert.match(sqlQueryNew, /6, N'Nhận NPL từ kho', N'Receive Materials', materialOutbound\.FirstOutboundDate/);
+  assert.match(sqlQueryNew, /6, N'Nhận NPL từ kho', N'Receive Materials', materialOutbound\.StepDate/);
   assert.match(sqlQueryNew, /CUTTING_PhieuXaVai AS relaxingRow/);
   assert.match(sqlQueryNew, /relaxingRow\.MaCay/);
   assert.match(sqlQueryNew, /tc\.MaCay/);
@@ -148,6 +147,9 @@ test("SQLQUERY uses tracking tables and SQLQUERY_NEW uses the cutting mapping ch
   assert.match(sqlQueryNew, /p\.NgayNhanBTP/);
   assert.match(sqlQueryNew, /cap\.NgayNhanBTP AS StepDate/);
   assert.match(sqlQueryNew, /13, N'Xuất BTP', N'WIP Outbound'/);
+  assert.match(sqlQueryNew, /14, N'Xuất BTP gia công', N'WIP to Subcontractor', subcontractOutbound\.StepDate/);
+  assert.match(sqlQueryNew, /CUTTING_PhieuGiaCongXuatKho_DaQuet AS gc/);
+  assert.match(sqlQueryNew, /CUTTING_PhieuGiaCongXuatKho AS gcMaster/);
   assert.match(sqlQueryNew, /15, N'Quét nhận BTP', N'WIP Scanning', wipOutbound\.StepDate/);
   assert.match(sqlQueryNew, /COALESCE\(traceabilityTimeline\.TimelineJson, JSON_QUERY\(N'\[\]'\)\) AS TimelineJson/);
   assert.doesNotMatch(sqlQueryNew, /Tracking_RFID_Master(?:\s|AS)/);

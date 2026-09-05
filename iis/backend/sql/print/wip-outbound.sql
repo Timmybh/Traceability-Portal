@@ -1,26 +1,19 @@
--- CHƯA XÁC MINH ĐẦY ĐỦ VỚI DB THẬT.
--- Mẫu in này dựng "giống Phiếu đặt BTP công đoạn 12" (xem wip-issuing.sql) theo
--- yêu cầu, dùng lại đúng cấu trúc DetailsJson để 2 mẫu khớp layout. Cùng khóa
--- SoPhieuCapBTP với công đoạn 12 (xem docs/TRACEABILITY-NEW-QUERY.sql, nhánh
--- "wipOutbound" dùng chung cap.SoPhieuCapBTP / cap.NgayNhanBTP cho cả bước 13
--- "Xuất BTP" lẫn bước 15 "Quét nhận BTP").
+-- Đã xác minh trực tiếp trên DB thật (2026-09-05), đối chiếu với mẫu in thực tế
+-- của phiếu 2608002186:
+--   dbo.CUTTING_PhieuCapBTP: NguoiTao, NguoiGui, NguoiDuyet đúng là 3 người ký
+--   ("Người đề nghị" = NguoiTao, "Tổ trưởng" = NguoiGui, "(P)Giám đốc xí nghiệp" = NguoiDuyet).
+--   dbo.CUTTING_PhieuCapBTP_ChiTiet: SoLuongDaVaoChuyen/SoLuongMayRa/SoLuongTon
+--   khớp đúng 3 cột đầu bảng; SoLuongThucXuat là số lượng ĐÃ XUẤT THỰC TẾ (khác
+--   SoLuongCanCap dùng cho mẫu "Đặt BTP"/wip-issuing.sql); SoLuong là cột
+--   "Số lượng" cuối bảng, giống nhau ở cả 2 mẫu.
 --
--- LƯU Ý QUAN TRỌNG cần xác nhận khi có DB: đây là bước "xuất" (đã có giao dịch
--- thật), rất có thể chi tiết đúng phải lấy theo TỪNG BARCODE đã quét xuất từ
--- dbo.CUTTING_PhieuCapBTP_BarcodeChiTiet (bảng này CÓ THẬT - đã dùng ở
--- docs/TRACEABILITY-NEW-QUERY.sql với các cột xác nhận: SoPhieuCapBTP, PO,
--- IdCapBTPCT [FK sang CUTTING_PhieuCapBTP_ChiTiet.Id], Lot, ChungLoai, TraBTP,
--- ThoiGianQuetXuat, IdPhieuXuatKhoBTP, TemBarcodeBTP) thay vì lấy theo PO/size
--- tổng hợp như công đoạn 12. Khi có DB, cân nhắc đổi JOIN detail bên dưới sang
--- bảng đó nếu form thật xuất theo barcode.
---
--- Cấu trúc 1 phần tử DetailsJson (giữ giống wip-issuing.sql):
+-- Cấu trúc 1 phần tử DetailsJson:
 -- {
 --   "PO": "4524260955",
 --   "Size": "UK10/EUM",
 --   "ColorDescription": "8974285 T-SHIRT MH500 F VERT CEDAR FLEUR",
 --   "QuantityInLine": 0, "QuantitySewn": 0, "QuantityRemaining": 0,
---   "QuantityNeeded": 130,   -- ở mẫu xuất, đây là "Số lượng xuất"
+--   "QuantityNeeded": 130,   -- ở mẫu xuất, đây là "Số lượng xuất" (SoLuongThucXuat)
 --   "Quantity": 130,
 --   "Note": ""
 -- }
@@ -38,20 +31,20 @@ SELECT
     CAST(NULL AS nvarchar(20))  AS FormNo,              -- mã BM - CHƯA có tham chiếu ảnh mẫu, để trống thay vì đoán
     CAST(NULL AS nvarchar(10))  AS RevisionNo,
     CAST(NULL AS nvarchar(50))  AS QrCode,              -- renderer mặc định dùng SoPhieuCapBTP nếu NULL
-    CAST(NULL AS nvarchar(100)) AS FactoryDirector,
-    CAST(NULL AS nvarchar(100)) AS TeamLeader,
-    CAST(NULL AS nvarchar(100)) AS Requester,
+    master.NguoiDuyet AS FactoryDirector,
+    master.NguoiGui AS TeamLeader,
+    master.NguoiTao AS Requester,
     JSON_QUERY((
         SELECT
             detail.PO,
             detail.SizeCode AS Size,
             detail.TenMau AS ColorDescription,
-            CAST(NULL AS decimal(18, 2)) AS QuantityInLine,     -- TODO: chưa rõ nguồn
-            CAST(NULL AS decimal(18, 2)) AS QuantitySewn,       -- TODO: chưa rõ nguồn
-            CAST(NULL AS decimal(18, 2)) AS QuantityRemaining,  -- TODO: chưa rõ nguồn
-            CAST(NULL AS decimal(18, 2)) AS QuantityNeeded,     -- TODO: chưa rõ nguồn (Số lượng xuất)
-            CAST(NULL AS decimal(18, 2)) AS Quantity,           -- TODO: chưa rõ nguồn
-            CAST(NULL AS nvarchar(255)) AS Note
+            detail.SoLuongDaVaoChuyen AS QuantityInLine,
+            detail.SoLuongMayRa AS QuantitySewn,
+            detail.SoLuongTon AS QuantityRemaining,
+            detail.SoLuongThucXuat AS QuantityNeeded,
+            detail.SoLuong AS Quantity,
+            detail.GhiChu AS Note
         FROM dbo.CUTTING_PhieuCapBTP_ChiTiet AS detail
         WHERE detail.IdCapBTP = master.IdCapBTP
         ORDER BY detail.Id
